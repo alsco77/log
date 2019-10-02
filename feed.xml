@@ -1,0 +1,909 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-10-02T16:22:54+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Alex Scott</title><subtitle>A blog about my life as a remote web and blockchain developer</subtitle><entry><title type="html">Monitoring DApp transactions on the backend to enforce business logic</title><link href="http://localhost:4000/transaction-monitoring/" rel="alternate" type="text/html" title="Monitoring DApp transactions on the backend to enforce business logic" /><published>2018-10-01T14:40:00+02:00</published><updated>2018-10-01T14:40:00+02:00</updated><id>http://localhost:4000/transaction-monitoring</id><content type="html" xml:base="http://localhost:4000/transaction-monitoring/">&lt;style&gt;
+    .center-image{
+        margin: 0 auto;
+        display: flex;
+    }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Sep 2018 - Oct 2018&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;Golang microservices that monitor the state of various Ethereum transactions, executing some business logic and updating our cloud firestore based on their status and the resulting state of the blockchain.&lt;/p&gt;
+
+&lt;h2 id=&quot;why&quot;&gt;Why&lt;/h2&gt;
+&lt;p&gt;Our (hybrid) DApps core on chain functionality was an escrow system into which one party would deposit funds. Due to the app using &lt;a href=&quot;https://firebase.google.com/docs/firestore/&quot;&gt;firestore&lt;/a&gt; as a database, it was thus important that its state reflected that of the on chain escrow. Having a pure client side mechanism for managing this state opened up many UX problems, for example: user A sends a tx to our escrow and his browser closes while the tx is pending - in this scenario the data would remain out of sync until either party next attempts to check the state (in addition, we would need to aso create this mechanism which would bloat the UX). We needed some mechanism that maintained high UX while securely enforcing our business rules.&lt;/p&gt;
+
+&lt;p&gt;Benefits of using server:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Maintain business logic in one place&lt;/li&gt;
+  &lt;li&gt;Provide robustness / mitigate potential security issues&lt;/li&gt;
+  &lt;li&gt;Ensure that our corresponding services execute correctly (SendGrid for email notifications)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;how&quot;&gt;How&lt;/h2&gt;
+
+&lt;p&gt;Tl;dr user sends the transaction to Ethereum &amp;gt; txHash is intercepted and sent for monitoring alongside some contextual info &amp;gt; upon completion/error, resulting smart contract state is read and propagated to dapp/users via database write and email service interaction&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/images/blockchain/monitor-architecture.png&quot; alt=&quot;Transaction monitoring architecture&quot; class=&quot;center-image&quot; /&gt;&lt;/p&gt;
+&lt;figcaption class=&quot;caption&quot;&gt;Architecture&lt;/figcaption&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Escrow deposit transaction is executed via our payment library (utilising web3) and the resulting tx hash is returned and sent to the transaction monitor alongside some contextual information
+    &lt;ul&gt;
+      &lt;li&gt;JS Payment library / &lt;a href=&quot;https://www.npmjs.com/package/web3&quot;&gt;web3&lt;/a&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Transaction monitor receives request from client, saves the transaction details in a SQL table and polls the status of the transaction. When it has been accepted or rejected, we communicate this information forward
+    &lt;ul&gt;
+      &lt;li&gt;Microservice on GCP&lt;/li&gt;
+      &lt;li&gt;Golang/SQL/(Etherscan/GETH)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Receives notification and basic contextual information from the monitor. We can then update the transaction and escrow objects on the database (after retrieving contract state from GETH), and then communicate this information to the users by dispatching emails via SendGrid.
+    &lt;ul&gt;
+      &lt;li&gt;Microservice on GCP&lt;/li&gt;
+      &lt;li&gt;Golang/GETH/Firebase/Sendgrid&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;supplementary-architecture&quot;&gt;Supplementary architecture&lt;/h3&gt;
+&lt;p&gt;In the case of something failing (either in the initial client-server API call, or the server itself, or node sync issue), a ‘state-cleaner’ endpoint that ensures basic contract state is reflected in the database can be called. In our case, we asynchronously hit this endpoint each time the escrow component is loaded, as a fallback mechanism&lt;/p&gt;
+
+&lt;h3 id=&quot;requirements&quot;&gt;Requirements&lt;/h3&gt;
+&lt;p&gt;Trustworthy Ethereum node - if it is out of sync (i.e. hasn’t received recent blocks) then we will get fed back incorrect information - this is another case of when a fallback mechanism has proven useful&lt;/p&gt;
+
+&lt;h3 id=&quot;potential-improvements&quot;&gt;Potential improvements&lt;/h3&gt;
+&lt;p&gt;Consolidate functionality and reduce overhead by polling the contract and reverse-engineering the state as opposed to sending the transactions individually/manually to the monitor. In this scenario we would monitor the contract itself (the source of truth), retrieve any new transactions, extract their transaction data and match it up with records in our firebase DB, enforcing the same logic as in the current implementation. In addition, this would allow us to monitor the transactions sent to our contract from other locations&lt;/p&gt;
+
+&lt;h2 id=&quot;links&quot;&gt;Links&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://gitlab.com/alsco77/ethereum-transaction-monitor&quot;&gt;Monitor&lt;/a&gt;
+&lt;a href=&quot;https://gitlab.com/alsco77/transaction-callback-api&quot;&gt;State manager&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;thoughts&quot;&gt;Thoughts&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;Golang and GCP == awesome&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="project" /><category term="Ethereum" /><category term="Geth" /><category term="Microservices" /><category term="Robust" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/thumbnails/monitor.png" /></entry><entry><title type="html">Leveraging Bancor to provide on chain ERC20 price oracle</title><link href="http://localhost:4000/price-oracle/" rel="alternate" type="text/html" title="Leveraging Bancor to provide on chain ERC20 price oracle" /><published>2018-09-01T14:40:00+02:00</published><updated>2018-09-01T14:40:00+02:00</updated><id>http://localhost:4000/price-oracle</id><content type="html" xml:base="http://localhost:4000/price-oracle/">&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Sep 2018 - Sep 2018&lt;/p&gt;
+
+&lt;h2 id=&quot;links&quot;&gt;Links&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/canyaio/canya-contracts-price-oracle&quot;&gt;Github Repo&lt;/a&gt;&lt;br /&gt;
+&lt;a href=&quot;https://medium.com/canyacoin/canya-releases-hedged-escrow-to-protect-platform-users-from-price-volatility-7fca7a0aad32&quot;&gt;Medium article&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;Deployable Ethereum ERC20 Price Oracle for any currency listed on the Bancor Network.&lt;/p&gt;
+
+&lt;p&gt;This Oracle was made in order to calculate the price for CanYaCoin -&amp;gt; DAI (USD) in order to allow &lt;a href=&quot;http://canwork.io&quot;&gt;CanWork&lt;/a&gt;s hedged escrow system to operate - check out the &lt;a href=&quot;https://medium.com/canyacoin/canya-releases-hedged-escrow-to-protect-platform-users-from-price-volatility-7fca7a0aad32&quot;&gt;medium article&lt;/a&gt; for more details on the hedged escrow.&lt;/p&gt;
+
+&lt;h3 id=&quot;technicals&quot;&gt;Technicals&lt;/h3&gt;
+&lt;p&gt;The final implementation is relatively straightforward - however distinguishing the mechanism and setting up the &lt;a href=&quot;/assets/contracts/test_migration.js&quot;&gt;test deployment&lt;/a&gt; with all required supplementary contracts to mimic a live BancorConverter required a reasonable work effort. Basically we:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Utilised the &lt;code class=&quot;highlighter-rouge&quot;&gt;getReturn&lt;/code&gt; function from the generic &lt;a href=&quot;/assets/contracts/BancorConverter.sol&quot;&gt;BancorConverter&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-solidity&quot;&gt;    function getTokenToDai(uint256 _tokenAmount) external view returns (uint256) {
+        uint256 decimals = MyERC20Token.decimals();
+        uint256 valueOfOneToken = MyTokenConverter.getReturn(MyERC20Token, OracleBase.BNT(), 10 ** decimals);
+        uint256 tokenValueInBNT = valueOfOneToken.mul(_tokenAmount).div(10 ** decimals);
+        return OracleBase.getBNTDAIConversion(tokenValueInBNT);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;ul&gt;
+  &lt;li&gt;Deployed generic &lt;code class=&quot;highlighter-rouge&quot;&gt;base&lt;/code&gt; contract to act as &lt;a href=&quot;/assets/contracts/ERC20PriceOracleBase.sol&quot;&gt;BNT-&amp;gt;DAI converter&lt;/a&gt; to allow for multiple child oracles in the future&lt;/li&gt;
+  &lt;li&gt;Deployed a &lt;code class=&quot;highlighter-rouge&quot;&gt;child&lt;/code&gt; oracle to act as the &lt;a href=&quot;/assets/contracts/ERC20PriceOracle.sol&quot;&gt;TOKEN-&amp;gt;BNT converter&lt;/a&gt;, which, coupled with communication to the base oracle can carry out the full conversion&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;ensuring-that-the-price-lookup-represented-an-accurate-value&quot;&gt;Ensuring that the price lookup represented an accurate value&lt;/h3&gt;
+&lt;p&gt;The nature of the conversion mechanism is such that the ratio between the volume of tokens held in the contract address is the rate. Thus, if we execute a high volume trade, this will affect the ratio and thus the conversion rate. Bancor does its best to account for this new rate of price as part of the calculation, even in theoretical lookup situations such as this. To get around that, we ran conversions for 1 token and then extrapolated the results.&lt;/p&gt;
+
+&lt;h3 id=&quot;utility&quot;&gt;Utility&lt;/h3&gt;
+&lt;p&gt;In order to provide an oracle for your token, you can easily use the deployment instructions given to deploy it onto the network.&lt;/p&gt;
+
+&lt;p&gt;For generalised or &lt;strong&gt;future use&lt;/strong&gt;, with a few minor modifications it is possible for this oracle to be adapted such that it can look up any token connected to Bancor Network - provided the corresponding BancorConverter contract address. The method would accept the addresses of the token and bancor converter in question rather than having them baked into the contract.&lt;/p&gt;
+
+&lt;h3 id=&quot;downsides-of-current-implementation&quot;&gt;Downsides of current implementation&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;The conversion relies on the Bancor network arbitrage system operating efficiently to represent an accurate value for BNT -&amp;gt; DAI&lt;/li&gt;
+  &lt;li&gt;Should the Bancor converter upgrade and change addresses (at the permission of the token owner), the converter will also need to update to point at the new address&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="project" /><category term="Ethereum" /><category term="Solidity" /><category term="Truffle" /><summary type="html">When Sep 2018 - Sep 2018</summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/thumbnails/bancor.png" /></entry><entry><title type="html">Crow Storm 🎯</title><link href="http://localhost:4000/crow-storm-app/" rel="alternate" type="text/html" title="Crow Storm 🎯" /><published>2018-05-01T14:40:00+02:00</published><updated>2018-05-01T14:40:00+02:00</updated><id>http://localhost:4000/crow-storm-app</id><content type="html" xml:base="http://localhost:4000/crow-storm-app/">&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Apr 2018 - April 2018&lt;/p&gt;
+
+&lt;h2 id=&quot;link&quot;&gt;Link&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://alsco77.github.io/crow-storm/&quot;&gt;CROW STORM&lt;/a&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;Fun web app allowing users the chance to earn Crow Coins through their interaction.&lt;/p&gt;
+
+&lt;p&gt;App was built as an innovative solution to satisfy the following requirements:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Deploy an ERC20 token and allow for purchasing&lt;/li&gt;
+  &lt;li&gt;Create an app using Angular that allows users to:
+    &lt;ul&gt;
+      &lt;li&gt;Check Ether balance&lt;/li&gt;
+      &lt;li&gt;Check token balance&lt;/li&gt;
+      &lt;li&gt;Purchase token using Ether&lt;/li&gt;
+      &lt;li&gt;Reward users with tokens as a product of their interaction&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;tech&quot;&gt;Tech&lt;/h3&gt;
+&lt;p&gt;For building the app:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Angular&lt;/li&gt;
+  &lt;li&gt;Material&lt;/li&gt;
+  &lt;li&gt;Firebase&lt;/li&gt;
+  &lt;li&gt;Animate.css&lt;/li&gt;
+  &lt;li&gt;Countup.js&lt;/li&gt;
+  &lt;li&gt;Ethereumjs-tx&lt;/li&gt;
+  &lt;li&gt;Web3&lt;/li&gt;
+  &lt;li&gt;Granim.js&lt;/li&gt;
+  &lt;li&gt;Three.js&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For releasing the ERC20 token:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Node.js&lt;/li&gt;
+  &lt;li&gt;Truffle&lt;/li&gt;
+  &lt;li&gt;Zeppelin Solidity&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;thoughts&quot;&gt;Thoughts&lt;/h2&gt;
+&lt;p&gt;This was a fun project allowing me to excercise some creativity and get to grips with the web3 tech. I think it turned out pretty cool!&lt;/p&gt;</content><author><name></name></author><category term="project" /><category term="Angular" /><category term="Design" /><category term="Web3" /><category term="Ethereum" /><summary type="html">When Apr 2018 - April 2018</summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/thumbnails/crowCoin.png" /></entry><entry><title type="html">Automated immigration solution</title><link href="http://localhost:4000/automated-immigration/" rel="alternate" type="text/html" title="Automated immigration solution" /><published>2018-03-01T14:40:00+01:00</published><updated>2018-03-01T14:40:00+01:00</updated><id>http://localhost:4000/automated-immigration</id><content type="html" xml:base="http://localhost:4000/automated-immigration/">&lt;style&gt;
+.centered{
+    display:block;
+    margin: 0 auto;
+}
+.app-pic{
+    display:inline-flex;
+    max-height:220px;
+}
+.demo-pic {
+    display:block;
+    margin: 0 auto;
+   max-width: 250px;
+}
+&lt;/style&gt;
+
+&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Nov 2017 - Mar 2018&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Redesigning the immigration control for air/sea ports&lt;/strong&gt; by developing a prototype application to demonstrate a &lt;strong&gt;seamless passenger flow&lt;/strong&gt; on their way into the country - through either sea or air ports. This solution satisfies the comprehensive requirements specifications of a robust large scale system whilst also being an innovative, futuristic thinking product.&lt;/li&gt;
+  &lt;li&gt;Here we make use of &lt;strong&gt;biometric facial recognition&lt;/strong&gt; to remove a number of the physical barriers involved in the previous process by detecting and tracking travellers and providing direction based on their known data.&lt;/li&gt;
+  &lt;li&gt;Multilingual solution encompasses applications for the traveller, officers on duty in the aiport and managers of the system.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;why&quot;&gt;Why&lt;/h2&gt;
+&lt;p&gt;The current immigration process is not terrible, but certainly not seamless and definitely not future proof. With this prototyped solution we can:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;improve the travellers experience, create efficiencies and maintain security&lt;/li&gt;
+  &lt;li&gt;give the traveller a seamless, intuitive experience&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;streamline airport operations, lower staffing requirement and increase automation&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;utilise the individuals anchored biometric identity&lt;/strong&gt; to allow for fast traveller analysis and the &lt;strong&gt;early detection of Persons of Interest (POI) or high risk travellers&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;reduce the current time consuming process and improve inneficiencies by capturing and maintaining traveller IPC data electronically&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;remove bottlenecks&lt;/strong&gt; by reducing reliance on manual checks at the Exit Marshall Points (EMP)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;my-role&quot;&gt;My role&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;Development across full solution
+    &lt;ul&gt;
+      &lt;li&gt;&lt;strong&gt;Specific focus on the capturing, handling and presentation of video and event stream data&lt;/strong&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Leading others on best Angular practices&lt;/li&gt;
+  &lt;li&gt;Contributing to solution architecture decisions
+    &lt;ul&gt;
+      &lt;li&gt;SCRUM, backlog selection, analysing considerations&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;development&quot;&gt;Development&lt;/h2&gt;
+
+&lt;h3 id=&quot;team-setup-and-methodology&quot;&gt;Team setup and methodology&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;Large corporation, lots of existing systems, methods and some red tape&lt;/li&gt;
+  &lt;li&gt;12-14 member large team of mostly intelligent, switched on individuals all &lt;strong&gt;excited&lt;/strong&gt; about the project
+    &lt;ul&gt;
+      &lt;li&gt;6 devs, Testers, PM, BA etc&lt;/li&gt;
+      &lt;li&gt;Remote locations with a central base (in which I reside)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Strict agile&lt;/strong&gt; methodology, two week sprints and daily stand ups&lt;/li&gt;
+  &lt;li&gt;Satisfying list of specific functional requirements
+    &lt;ul&gt;
+      &lt;li&gt;Development according to &lt;strong&gt;comprehensively designed moqups&lt;/strong&gt;&lt;/li&gt;
+      &lt;li&gt;Goals in mind regarding performance, usability etc&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;concept-and-flow-of-solution&quot;&gt;Concept and flow of solution&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&quot;/assets/images/immigration/flow1.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/flow1.png&quot; class=&quot;html5lightbox&quot; style=&quot;width:49%;display:inline-block;&quot; data-group=&quot;flow-diagrams&quot; title=&quot;Traveller flow 1&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/flow1.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/flow2.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/flow2.png&quot; class=&quot;html5lightbox&quot; style=&quot;width:49%;display:inline-block;&quot; data-group=&quot;flow-diagrams&quot; title=&quot;Traveller flow 2&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/flow2.png&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;See the traveller flow diagrams above. Here we have created 3 apps:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Declaration submission app &lt;strong&gt;(Point 1)&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Travellers can submit their declaration online via mobile app or using a kiosk counterpart&lt;/li&gt;
+      &lt;li&gt;Data is logged and stored to pair with passport and watchlist details&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div style=&quot;text-align:center&quot;&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-2.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-2.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Create a safety pin&quot;&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-3.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-3.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Create profile via scanning of ticket&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/app/ap-3.png&quot; class=&quot;app-pic&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-4.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-4.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Create a profile&quot;&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-5.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-5.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Homescreen after profile creation&quot;&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-6.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-6.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Create your declaration&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/app/ap-6.png&quot; class=&quot;app-pic&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-7.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-7.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Submit declaration - either online or via barcode&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/app/ap-7.png&quot; class=&quot;app-pic&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/app/ap-8.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/app/ap-8.png&quot; data-group=&quot;app&quot; class=&quot;html5lightbox&quot; title=&quot;Submit via barcode&quot;&gt;
+&lt;/a&gt;
+&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Traveller view app &lt;strong&gt;(Point 5)&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Travellers look into the live video screen and are assigned to either red or green channel, based on their IPC, Passport details amongst other criteria&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/immigration/travellerView.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/travellerView.png&quot; class=&quot;html5lightbox centered&quot; title=&quot;Traveller channel color overlines their head and directs them&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/travellerView.png&quot; class=&quot;demo-pic&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Authorised Officer (AO) app (Point 5)&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;strong&gt;AO can view live video feeds of travellers with live channel information assigned to them&lt;/strong&gt;&lt;/li&gt;
+      &lt;li&gt;AO &lt;strong&gt;recieve notifications about travellers&lt;/strong&gt;, Persons of Interest, Travellers in wrong lane&lt;/li&gt;
+      &lt;li&gt;AO can manually change persons channel and add events to their details&lt;/li&gt;
+      &lt;li&gt;AO can &lt;strong&gt;view details of passenger&lt;/strong&gt;, their group, and a list of all events that passenger has taken part in&lt;/li&gt;
+      &lt;li&gt;AO can identify passengers with covered faces not in the system and direct them&lt;/li&gt;
+      &lt;li&gt;AO can view traveller analytics&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;Note - these images are mockups where the final version contained video feeds and faces as opposed to blue boxes&lt;/em&gt;&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/immigration/nfv-live.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-live.png&quot; class=&quot;html5lightbox&quot; style=&quot;width:49%;display:inline-block;&quot; data-group=&quot;nfv-pics&quot; title=&quot;AOs can see live feeds of travellers, channel colors and notifications&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/nfv-live.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/nfv-notifications.png&quot; data-fullscreenmode=&quot;true&quot; data-group=&quot;nfv-pics&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-notifications.png&quot; class=&quot;html5lightbox&quot; title=&quot;Recieve notifications for warnings, persons of interest etc&quot;&gt;
+&lt;/a&gt; 
+&lt;a href=&quot;/assets/images/immigration/nfv-changechannel.png&quot; data-fullscreenmode=&quot;true&quot; data-group=&quot;nfv-pics&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-changechannel.png&quot; class=&quot;html5lightbox&quot; title=&quot;Change the channel of a traveller&quot;&gt;
+&lt;/a&gt; 
+&lt;a href=&quot;/assets/images/immigration/nfv-identify.png&quot; data-fullscreenmode=&quot;true&quot; data-group=&quot;nfv-pics&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-identify.png&quot; class=&quot;html5lightbox&quot; title=&quot;Manually identify a traveller&quot;&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/nfv-person.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-person.png&quot; class=&quot;html5lightbox&quot; style=&quot;width:49%;display:inline-block;&quot; data-group=&quot;nfv-pics&quot; title=&quot;AO can select a traveller to view all their details&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/nfv-person.png&quot; /&gt;
+&lt;/a&gt; &lt;br /&gt;
+&lt;a href=&quot;/assets/images/immigration/nfv-personsolo.png&quot; data-fullscreenmode=&quot;true&quot; data-group=&quot;nfv-pics&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-personsolo.png&quot; class=&quot;html5lightbox&quot; title=&quot;Individual traveller&quot;&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/immigration/nfv-cameras.png&quot; data-fullscreenmode=&quot;true&quot; data-group=&quot;nfv-pics&quot; data-thumbnail=&quot;/assets/images/immigration/nfv-cameras.png&quot; class=&quot;html5lightbox&quot; title=&quot;Set the traveller view directions&quot;&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;architecture-and-technology&quot;&gt;Architecture and Technology&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&quot;/assets/images/immigration/nfvflow.jpg&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/nfvflow.jpg&quot; class=&quot;html5lightbox&quot; style=&quot;width:58%;display:inline-block;&quot; data-group=&quot;com-flow-diagrams&quot; title=&quot;Flow of traveller tracking solution&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/nfvflow.jpg&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/immigration/declaration.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/immigration/declaration.png&quot; class=&quot;html5lightbox&quot; style=&quot;width:38%;display:inline-block;&quot; data-group=&quot;com-flow-diagrams&quot; title=&quot;Flow of initial declaration submission&quot;&gt;
+	&lt;img src=&quot;/assets/images/immigration/declaration.png&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;h4 id=&quot;traveller-tracking-solution&quot;&gt;Traveller tracking solution&lt;/h4&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;CameraEyeLib&lt;/strong&gt; (Outputs jpeg stream and retrieves facial and channel data from watch service)
+    &lt;ul&gt;
+      &lt;li&gt;C# service&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Camera Event Service&lt;/strong&gt; (Sends processed frame event data off to client and conductor)
+    &lt;ul&gt;
+      &lt;li&gt;C# Web API to access camera config etc&lt;/li&gt;
+      &lt;li&gt;SignalR to broadcast processed frame info&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;SignalR Service&lt;/strong&gt; (Brokers messages)&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Conductor&lt;/strong&gt; (Handles detected heads in frame, raises any notifications and updating traveller details/logs accordingly, Handles API requests to access/update traveller info)
+    &lt;ul&gt;
+      &lt;li&gt;.Net 4.6.1&lt;/li&gt;
+      &lt;li&gt;SQL Server DB (14.0.3008)&lt;/li&gt;
+      &lt;li&gt;EntityFramework (6.1.3)&lt;/li&gt;
+      &lt;li&gt;LINQ&lt;/li&gt;
+      &lt;li&gt;C# Web API (5.0.0)&lt;/li&gt;
+      &lt;li&gt;Ninject (3.3.0)&lt;/li&gt;
+      &lt;li&gt;Multiple C# Services (handle frame events to update person info)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Officer View&lt;/strong&gt; (Handles event stream to display channel icons on travellers, allows officer to access, update and asses any traveller on camera or by search)
+    &lt;ul&gt;
+      &lt;li&gt;Angular 4.4.x, CLI 1.6.5, Material 2.0.0-beta.16, rxjs ^5.5.6, SignalR&lt;/li&gt;
+      &lt;li&gt;Structured, modular codebase&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Traveller View&lt;/strong&gt; (Basic app which draws the boxes on the travellers heads and tells them which way to go)
+    &lt;ul&gt;
+      &lt;li&gt;Same stack&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;declaration-submission-solution&quot;&gt;Declaration submission solution&lt;/h4&gt;
+&lt;p&gt;App allows creation of IPC, and submission to a database which can then be used to assign a travellers channel.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Db&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;SQL Server&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Declaration API&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;C# .NET Web API (5)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Management&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Angular 4.4.x app, SurveyJs for form creation and management&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Declaration App&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Ionic (4.5.x) [native storage, barcode scanner], Angular 4.4.4 app,surveyjs],
+        &lt;ul&gt;
+          &lt;li&gt;multilayer barcode creation, sql-storage, offline capability&lt;/li&gt;
+        &lt;/ul&gt;
+      &lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Kiosk&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;Same as declaration app&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;deployment&quot;&gt;Deployment&lt;/h3&gt;
+&lt;p&gt;Having multiple environments, for testing, staging, locally etc allows us to have complete control of what we are testing. It lets us test individual components and omits the reliance on seperate parts of the system.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Each module shown in diagram above performs &lt;strong&gt;continuous deployment&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;strong&gt;Windows server&lt;/strong&gt; to store environments and builds and to run the windows services&lt;/li&gt;
+      &lt;li&gt;&lt;strong&gt;TeamCity&lt;/strong&gt; for automated builds&lt;/li&gt;
+      &lt;li&gt;&lt;strong&gt;Octopus&lt;/strong&gt; to deploy out to multiple environments&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;challenges&quot;&gt;Challenges&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;Accomodating for and &lt;strong&gt;optimising the amount of processing power required&lt;/strong&gt; to handle multiple simultaneous facial detection cameras and keep the stream &lt;strong&gt;delay to an absolute minimum&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;Modifying system and ensuring rigorous testing has been conducted when pushing features or fixes to live&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Handling of multi threaded services&lt;/strong&gt; and resolving hard to debug threading issues&lt;/li&gt;
+  &lt;li&gt;Getting head around project with lots of moving parts, each with multiple environments and settings&lt;/li&gt;
+  &lt;li&gt;Adjusting to corporate culture and contributing positively within a team of 10+ senior people in a time constrained environment&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;what-i-found-fun&quot;&gt;What I found fun&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Handling the real time face processing and turning this into an interactive video feed&lt;/strong&gt;, drawing boxes and outlining information on the view&lt;/li&gt;
+  &lt;li&gt;The final rush to deliver the prototype seen all the developers converge to one location - real team spirit and felt like a hackathon&lt;/li&gt;
+  &lt;li&gt;Having a tangible output to the project, and one which was impressive and highly regarded&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;Good to work on complex, challenging project with a tangible output
+    &lt;ul&gt;
+      &lt;li&gt;&lt;strong&gt;Inspired me to work on products that provide value&lt;/strong&gt; and not just programming for its own sake&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Working is more thrilling when everybody is excited and working hard to deliver a product&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="project" /><category term="Angular" /><category term="C#" /><category term="Biometrics" /><category term="Complex" /><category term="Futuristic" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/thumbnails/aeroplane.png" /></entry><entry><title type="html">Managing finances for the future</title><link href="http://localhost:4000/managing-finances/" rel="alternate" type="text/html" title="Managing finances for the future" /><published>2017-11-13T11:40:00+01:00</published><updated>2017-11-13T11:40:00+01:00</updated><id>http://localhost:4000/managing-finances</id><content type="html" xml:base="http://localhost:4000/managing-finances/">&lt;style&gt;
+.thumbnail{
+	 width: 45%; 
+	 display:inline-block;
+ }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;what-is-this-all-about&quot;&gt;What is this all about?&lt;/h2&gt;
+&lt;p&gt;This is &lt;strong&gt;NOT&lt;/strong&gt; some sort of ponzi scheme or a guide how to get rich quick.. but an explanation of a set of simple rules that you can apply to your financial management in order to accumulate wealth and prepare for the future. &lt;br /&gt;
+These are general life lessons achievable by all and should provide the basis to stability in your mind and bank account. &lt;br /&gt;
+I am writing this because I feel that this is basic information that a large proportion of people could benefit from hearing.. if you are in the system you may as well make the best of it!&lt;/p&gt;
+
+&lt;h4 id=&quot;pre-requisites&quot;&gt;Pre-requisites&lt;/h4&gt;
+&lt;ul&gt;
+  &lt;li&gt;A job that pays you more than you need to survive&lt;/li&gt;
+  &lt;li&gt;Moderate self control&lt;/li&gt;
+  &lt;li&gt;Common sense&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;golden-rules&quot;&gt;Golden rules&lt;/h2&gt;
+&lt;ol&gt;
+  &lt;li&gt;Set aside money each month&lt;/li&gt;
+  &lt;li&gt;Invest wisely&lt;/li&gt;
+  &lt;li&gt;Start as soon as possible&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;1-setting-aside-money-each-month&quot;&gt;1) Setting aside money each month&lt;/h3&gt;
+&lt;p&gt;Nearly everyone will spend every last penny in their current account in anticipation for their next paycheque, it’s just human nature! The easiest way to save money is to just &lt;strong&gt;take it out of your bank account as soon as you get paid and tuck it away in savings&lt;/strong&gt;.. whether that be daily, weekly or monthly!&lt;br /&gt;
+You might say WOW, this doesn’t sound like fun… i’ll just wait till i’m older. Just give it a try, personally I genually find satisfaction from making the transfer into the savings account.&lt;br /&gt;
+Figure out how much money you generally spend for food, rent and living expenses, factor in your recreational activities, add a little cushion on the top and then subtract this from your salary… and hey presto! This is how much you should be putting into your savings each time you get paid.&lt;br /&gt;
+I am not a fan of meticulously planning out expenses for the month or living off pot noodles or rice or something.. this isn’t sustainable and will burn you out. You need to keep a realistic aim for your recurring savings.&lt;/p&gt;
+
+&lt;h4 id=&quot;remember-the-tighter-times&quot;&gt;Remember the tighter times&lt;/h4&gt;
+&lt;p&gt;As you get a steady income it is very easy to gradually grow accustomed to a more lavish lifestyle, whether this means buying extra clothes or getting that bottle of grey goose when you are out partying. But you must remember your roots.. you don’t actually need this extra stuff and you managed before without it, so maybe you can cut this stuff out and contribute further to your savings. &lt;br /&gt;
+We are exposed to so many &lt;strong&gt;adverts&lt;/strong&gt; these days and it has become so much a part of our society that we don’t even realise that we are being sold to any more.. even the lyrics of popular music are telling us to go out and spend our money frivelously with rappers gloating about all their money and lavish lifestyle.. we are being exposed to all these brands and signals.. you need to try and understand that you do not need all this shit! Your consumerism and materialism can be controlled!&lt;/p&gt;
+
+&lt;h3 id=&quot;2-invest-wisely&quot;&gt;2) Invest wisely&lt;/h3&gt;
+&lt;p&gt;It is very easy to get suckered into get rich quick schemes of various sorts.. so it is important to be able to spot opportunities that are too good to be true.&lt;br /&gt; 
+At the moment crypto currencies can provide huge returns with many people claiming to be able to get you rich, and while I do endorse crypto and particularly the underlying technology, I do not endorse the scammers and pseudo ‘traders’ that come with it. &lt;br /&gt;
+Whilst established markets like stocks &amp;amp; shares do not offer jaw dropping returns, they (generally) provide a steady return on investment that far exceeds the rate of savings accounts (disregarding events like the housing market crash - see timing investments).
+The following rules apply to stocks &amp;amp; shares and those markets who share common principles.&lt;/p&gt;
+
+&lt;h4 id=&quot;choosing-the-right-stock&quot;&gt;Choosing the right stock&lt;/h4&gt;
+&lt;p&gt;There are sh*tloads of choices out there… how are you supposed to know which one to pick? Well, unless you are knowledgable about particular industries and can spot a long term winner, an advisable long term bet is to go for &lt;a href=&quot;https://www.investopedia.com/terms/i/indexfund.asp&quot;&gt;index funds&lt;/a&gt;, which give returns based on the performance of the overall market. I first observed this theory in Daniel Kahnemans &lt;a href=&quot;https://www.goodreads.com/book/show/11468377-thinking-fast-and-slow&quot;&gt;book&lt;/a&gt; ‘Thinking fast and slow’ in which he invalidates the hedge fund managers position by showing them that their funds performed no better than an absolute blind pick over a long period of time.&lt;br /&gt;
+This concept was put in to practice by Warren Buffet who WON a &lt;a href=&quot;https://www.businessinsider.com.au/warren-buffett-wins-million-dollar-bet-against-hedge-funds-2018-1?r=US&amp;amp;IR=T&quot;&gt;$1 million bet&lt;/a&gt; that an index fund would out perform a basket of hedge funds over a 10 year period.&lt;/p&gt;
+
+&lt;h4 id=&quot;dollar-cost-averaging&quot;&gt;Dollar cost averaging&lt;/h4&gt;
+&lt;p&gt;In a nutshell, this technique is when you spread your investment out over a period of time in order to average out the purchase price of the asset. The goal here is to mitigate risk and ensure you get a fair buy in price however you may miss out on a good opportunity. Regardless, this is a good strategy for a new investor. Check out &lt;a href=&quot;https://www.investopedia.com/terms/d/dollarcostaveraging.asp&quot;&gt;some more reading&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h4 id=&quot;timing-your-investments&quot;&gt;Timing your investments&lt;/h4&gt;
+&lt;p&gt;If you have time to check out &lt;a href=&quot;https://www.youtube.com/watch?v=PHe0bXAIuk0&quot;&gt;this video on how the economic machine works&lt;/a&gt;, it will explain the 5 and 10 year debt cycles which seemingly naturally occur in our economy. Historically through the 20th century we have seen a series of booms and busts, which are now more commonly accentuated by common psychological traits of investing (see F.O.M.O. &lt;a href=&quot;https://www.youtube.com/watch?v=Pz_9VsW869Y&quot;&gt;in this video&lt;/a&gt;).&lt;br /&gt;
+In recent years we have seen the dot com bubble burst (2001) and the housing market crash (2008), note that it has been 10 years since the last crash… and since the housing market burst, the value of NASDAQ has risen roughly 600%… this to me, based on history, means it may not be the most perfect time to invest.&lt;br /&gt;
+Generally, if you observe these big events, and don’t let emotions make your decisions for you, then you have a big platform from which to make good investments.&lt;/p&gt;
+
+&lt;h4 id=&quot;keep-a-diverse-portfolio&quot;&gt;Keep a diverse portfolio&lt;/h4&gt;
+&lt;p&gt;Owning assets of different types (gold, bonds, stocks, crypto) will help you mitigate risk and is always advisable. It is common sense.&lt;br /&gt;
+In addition, to properly capitalise on the point above (timing your investments) you need to ensure you keep sufficient &lt;b&gt;cash&lt;/b&gt; ready. Should the markets crash you will wish you had liquid cash ready to invest.&lt;br /&gt;
+Remember, &lt;b&gt;fiat is part of a balanced portfolio&lt;/b&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;3-start-as-soon-as-possible&quot;&gt;3) Start as soon as possible&lt;/h3&gt;
+&lt;p&gt;Don’t wait around to begin saving up. The earlier you invest, the more the investment will be worth by the time you are at 60. For example, investing $1000 and getting 10% interest a year ($100) means that by year 2 that $1000 investment will be worth $1100, meaning that by year 3 you get interest on that $100 (an extra $10), up to $1210… and so on. This is compounding interest in a nutshell.&lt;/p&gt;
+
+&lt;h4 id=&quot;the-power-of-compounding-interest&quot;&gt;The power of compounding interest&lt;/h4&gt;
+&lt;p&gt;Taking view of the following diagrams, each given a modest interest rate of 8% a year, you can see the potential gains made:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Investing $500 a month from the age of 22 to 60 (38 years) = $1,487,000&lt;/li&gt;
+  &lt;li&gt;Investing $500 a month starting at age &lt;b&gt;32&lt;/b&gt; to 60 (28 years) = $628,000&lt;/li&gt;
+  &lt;li&gt;Making the same gains in 28 years as in step one - takes &lt;b&gt;$1183&lt;/b&gt; (roughly 2.2x as much)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/finance/500for38.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/finance/500for38.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;interest&quot; title=&quot;500 a month for 38 years&quot;&gt;
+	&lt;img src=&quot;/assets/images/finance/500for38.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/finance/500for28.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/finance/500for28.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;interest&quot; title=&quot;500 a month for 28 years&quot;&gt;
+	&lt;img src=&quot;/assets/images/finance/500for28.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/finance/1183for28.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/finance/1183for28.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;interest&quot; title=&quot;1183 a month for 28 years&quot;&gt;
+	&lt;img src=&quot;/assets/images/finance/1183for28.png&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;Essentially this shows us that you get rewarded heavily (in the long term) for investing early. You are saving yourself a large amount of hassle later on in life by getting the ball rolling early.&lt;/p&gt;
+
+&lt;h2 id=&quot;other-tips&quot;&gt;Other tips&lt;/h2&gt;
+&lt;ul&gt;
+  &lt;li&gt;Get a part time job that you enjoy. Not only could this be fun, but on top of your base salary this is pure savings&lt;/li&gt;
+  &lt;li&gt;Initially, build up a security fund of 3 months living expenses, so should you lose your job or have difficulties, you won’t need to liquidate any assets&lt;/li&gt;
+  &lt;li&gt;Sleep on big purchases, you may find out that you don’t really want/need the item the next day&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;summary&quot;&gt;Summary&lt;/h2&gt;
+&lt;p&gt;Making small changes to your lifestyle now will have a snowball effect throughout your life. Get going and set yourself up for a financially secure life.&lt;/p&gt;</content><author><name></name></author><category term="blog" /><category term="finance" /><category term="blog" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/thumbnails/stocks.jpg" /></entry><entry><title type="html">GP TeamNet</title><link href="http://localhost:4000/GPTN/" rel="alternate" type="text/html" title="GP TeamNet" /><published>2017-10-02T14:40:00+02:00</published><updated>2017-10-02T14:40:00+02:00</updated><id>http://localhost:4000/GPTN</id><content type="html" xml:base="http://localhost:4000/GPTN/">&lt;style&gt;
+ .thumbnail{
+	 width: 30%; 
+	 display:inline-block;
+ }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Dec 2016 - Oct 2017&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.clarity.co.uk/gpteamnet/&quot;&gt;GP TeamNet&lt;/a&gt; (GPTN), a subsidiary of &lt;a href=&quot;https://www.clarity.co.uk/&quot;&gt;Clarity&lt;/a&gt;, provide a web-based information-sharing, collaboration and compliance platform for GP practices and practice groups and are the front runner for this technology in the UK. The platform comes in the form of a large scale web app which has matured over 6 years and now contains a extensive feature list.&lt;/p&gt;
+
+&lt;p&gt;GPTN is very popular in England and has seen &lt;strong&gt;rapid growth&lt;/strong&gt; over the last 2 years, with the gross profit having doubled during my short time involved in the product. At the time of writing there are over 2700 practices using GPTN as their information sharing service platform, assisting them in day to day running of the practice! The company put a massive focus on customer satisfaction and app functionality, genuinely doing their best to accomodate issues raised by users, as is reflected in their &lt;a href=&quot;https://practiceindex.co.uk/gp/gpteamnet&quot;&gt;reviews&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3 id=&quot;site-map&quot;&gt;Site map&lt;/h3&gt;
+&lt;p&gt;There is no getting around it - GPTN is a &lt;strong&gt;large application&lt;/strong&gt; and boasts an abundance of functionality. There are a lot of aspects involved in running a GP practice; managing projects, raising/handling significant events, organising/auditing staff training, accessing contacts, publishing documents - to name but a few. The system is big, with over 40 core ‘areas’ to account for features like the ones just listed, most of which can be accessed &lt;a href=&quot;/assets/images/gptn/menuSnippet.png&quot; class=&quot;html5lightbox&quot; title=&quot;Main menu&quot; data-description=&quot;Toolbar dropdown&quot;&gt;via the main menu&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;There are over 10 main item types, e.g. library items, topics, significant events which can be accessed via the &lt;a href=&quot;/assets/images/gptn/search.png&quot; class=&quot;html5lightbox&quot; title=&quot;Search&quot; data-description=&quot;Results list&quot;&gt;search page&lt;/a&gt; which utilises ajax and elasticsearch calls to asynchronously populate the best search results.&lt;/p&gt;
+
+&lt;h2 id=&quot;my-role&quot;&gt;My role&lt;/h2&gt;
+&lt;p&gt;Due to the small size of the team, with 2 developers out of 7 total members, each person plays an important role and is responsible for a variety of tasks. My main tasks (in order of magnitude) were to:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Maintain and develop the application across the &lt;strong&gt;full development stack&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;Organise the development plan - discussing, selecting and prioritising features&lt;/li&gt;
+  &lt;li&gt;Satisfy end user requests for statistics or modify their user data/app content, as well as providing assistance to the rest of the team&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;development&quot;&gt;Development&lt;/h2&gt;
+
+&lt;h3 id=&quot;methodology&quot;&gt;Methodology&lt;/h3&gt;
+&lt;p&gt;GPTN employed an agile methodology, aiming to do 2 week SCRUMs with a points based system to assign development time to tasks. After each iteration a deploy is made and the user base is sent an email with the latest features or fixes. The 2 week iterations are somewhat relaxed, for example when a large piece of functionality or new section is added to the system, we can afford to take longer.&lt;/p&gt;
+
+&lt;h3 id=&quot;architecture-and-technology&quot;&gt;Architecture and Technology&lt;/h3&gt;
+&lt;p&gt;I will try to keep this as basic as possible disregarding most packages and plugins, so, from the top down:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Dynamic web pages using &lt;strong&gt;HTML&lt;/strong&gt;, &lt;strong&gt;CSS&lt;/strong&gt; (jQuery UI), ASP.NET &lt;strong&gt;Razor&lt;/strong&gt; (3.2) and &lt;strong&gt;jQuery&lt;/strong&gt; (3.2)&lt;/li&gt;
+  &lt;li&gt;ASP.NET &lt;strong&gt;MVC&lt;/strong&gt; (6)
+    &lt;ul&gt;
+      &lt;li&gt;Automapper to help manage large domain&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;A logic layer utilising:
+    &lt;ul&gt;
+      &lt;li&gt;A carefully constructed domain with cleanly structured inheritance&lt;/li&gt;
+      &lt;li&gt;&lt;strong&gt;NHibernate&lt;/strong&gt; for ORM and queries&lt;/li&gt;
+      &lt;li&gt;&lt;strong&gt;Elasticsearch&lt;/strong&gt; for complex and fast DB queries&lt;/li&gt;
+      &lt;li&gt;&lt;strong&gt;ServiceStack&lt;/strong&gt; for Web APIs&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;SQL Server&lt;/strong&gt;&lt;/li&gt;
+  &lt;li&gt;Comprehensive unit testing utilising &lt;a href=&quot;https://github.com/ayende/rhino-mocks&quot;&gt;Rhino Mocks&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Continous deployment made possible by:
+    &lt;ul&gt;
+      &lt;li&gt;3 environment configurations&lt;/li&gt;
+      &lt;li&gt;2 live &lt;strong&gt;windows servers&lt;/strong&gt; (2012)&lt;/li&gt;
+      &lt;li&gt;&lt;a href=&quot;https://www.jetbrains.com/teamcity/&quot;&gt;TeamCity&lt;/a&gt;&lt;/li&gt;
+      &lt;li&gt;Migration management to keep databases in sync&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;vertical-slice&quot;&gt;Vertical slice&lt;/h3&gt;
+&lt;p&gt;The best way for me to show you this architecture in action is to run through an area I added to the system - ‘Reporting’. The purpose of this area was to provide users with the capability to get stats on items their practice had been viewing, the views on items created from within the practice, as well as for parent CCGs (comissioning groups) to analyse their child practices stats. These come in the form of four report pages, two of which used by GPTN staff and high level practices to get an in depth look at their childrem, and two (which we will focus on) to provide each practice with statistics. The aim being to reduce the number of manual reports needing done on our end to create a more scalable product.&lt;/p&gt;
+
+&lt;div style=&quot;text-align: justify&quot;&gt;
+&lt;a href=&quot;/assets/images/gptn/reportingMenu.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/reportingMenu.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;reportingSet&quot; title=&quot;Report menu&quot;&gt;
+	&lt;img src=&quot;/assets/images/gptn/reportingMenu.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/gptn/reporting.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/reporting.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;reportingSet&quot; title=&quot;Report view&quot;&gt;
+	&lt;img src=&quot;/assets/images/gptn/reporting.png&quot; /&gt;
+&lt;/a&gt;
+&lt;a href=&quot;/assets/images/gptn/reportingSub.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/reportingSub.png&quot; class=&quot;html5lightbox thumbnail&quot; data-group=&quot;reportingSet&quot; title=&quot;Sub report&quot;&gt;
+	&lt;img src=&quot;/assets/images/gptn/reportingSub.png&quot; /&gt;
+&lt;/a&gt;
+&lt;span style=&quot;width: 100%; display:inline-block; line-height: 0&quot;&gt;&lt;/span&gt;
+&lt;/div&gt;
+
+&lt;p&gt;So.. &lt;strong&gt;here’s the dev process&lt;/strong&gt; (somewhat in order) of how the two standard reports were created (&lt;a href=&quot;/assets/images/gptn/reportingFileHierarchy.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/reportingFileHierarchy.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;reportingSet&quot; title=&quot;File structure&quot;&gt;file structure for reference&lt;/a&gt;):&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Fully spec out the details of the report (‘ourViews’ report requires us to view the sources of the items which the current practice has viewed - we do it first)&lt;/li&gt;
+  &lt;li&gt;Create the new area folder, with standard views, a controller and a basic view model&lt;/li&gt;
+  &lt;li&gt;Create a new NHibernate repository with a query to obtain the total views of our items from each source (&lt;a href=&quot;/assets/images/gptn/ourItemsES.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/ourItemsES.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;reportingSet&quot; title=&quot;Views by practice query&quot;&gt;check out the end-feature query&lt;/a&gt;) and plug this into the view/model&lt;/li&gt;
+  &lt;li&gt;Build up an expandable practice hierarchy and add parameters to refine search results&lt;/li&gt;
+  &lt;li&gt;Modify the view to reload a partial with a jqGrid via ajax containing the report results when a change to the parameters is made&lt;/li&gt;
+  &lt;li&gt;Add a sub-report to each practice to view a breakdown of the most popular items (new partial/ElasticSearch call)&lt;/li&gt;
+  &lt;li&gt;Modularise code, adding a base controller to accomodate a second report (‘ourItems’ - who has been looking at our items) containing overlapping functionality which utilises different repository call&lt;/li&gt;
+  &lt;li&gt;Create an export service and provide ability to export the data to CSV&lt;/li&gt;
+  &lt;li&gt;Add unit tests for report creation and ensure there are no failures&lt;/li&gt;
+  &lt;li&gt;Have the area verified by team, adding corrections before handing over to tester&lt;/li&gt;
+  &lt;li&gt;Insert records to the ‘MenuItem’ table in DB with the new menu details, creating a migration and adding to next deployment&lt;/li&gt;
+  &lt;li&gt;Deploy feature and inform users of the new reports, with a ‘how-to’ guide on how to utilise   &lt;br /&gt;
+&lt;em&gt;NB&lt;/em&gt;: No new domain level objects/mapping needed here as queries are accessing information existing on the item objects&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;what-i-found-fun&quot;&gt;What I found fun&lt;/h3&gt;
+&lt;p&gt;Modularising and improving the UX across the create/edit pages for the 30+ items able to be created in the system.&lt;br /&gt;
+Each item contains a variety of personalised fields, as well as many common settings i.e. item visibility, linking to other items, notifications etc. Previously all this content was given to the user on one screen, in a columned edit page, however this was a lot of info for the user. I modularised this process across the board and came up with a solution that utilised &lt;strong&gt;Razor templating&lt;/strong&gt; and &lt;strong&gt;jq Tabs&lt;/strong&gt; in order to serve the user the correct fields based on the viewmodels &lt;strong&gt;inheritance hierarchy&lt;/strong&gt;. Not only does this &lt;strong&gt;vastly improve UX&lt;/strong&gt; allowing users not to get bombared with info, but it allows for much easier &lt;strong&gt;scaling of the system&lt;/strong&gt; with modularised code.&lt;br /&gt;
+I found a great sense of satisfaction completing this task, creating a comparatively sleek UI and knowing how benificial it would be to the end user.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/gptn/addlibrary.png&quot; data-fullscreenmode=&quot;true&quot; data-thumbnail=&quot;/assets/images/gptn/addlibrary.png&quot; class=&quot;html5lightbox&quot; title=&quot;Add library item&quot;&gt;
+	&lt;img src=&quot;/assets/images/gptn/addlibrary.png&quot; class=&quot;centered&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;challenges&quot;&gt;Challenges&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;strong&gt;Framework upgrade&lt;/strong&gt;: Following the decision to remove support for IE7+, we upgraded our full stack
+    &lt;ul&gt;
+      &lt;li&gt;Upgraded .NET 4 to 4.7, MVC 3 to 6, ElasticSearch 1.x to 5.6.3, jQuery 1.x to 3.2.1&lt;/li&gt;
+      &lt;li&gt;Handling all deprecated methods/functionality and finding/replacing all errors, as well as refactoring code to new more readable syntax required thorough work&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Dealing with &lt;strong&gt;rapid expansion&lt;/strong&gt;: Due to rapid growth we needed to provide a &lt;strong&gt;scalable&lt;/strong&gt; support system
+    &lt;ul&gt;
+      &lt;li&gt;Genericised and organised frequently ran scripts in order to cut down on manual work when providing reports&lt;/li&gt;
+      &lt;li&gt;Provided the support team with their own reporting tools built into the system&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Accounting for old browsers: Due to the requirements of the user base all new features (up until we deprecated support) had to be &lt;strong&gt;compliant with IE7&lt;/strong&gt;, limiting the options availble for solution&lt;/li&gt;
+  &lt;li&gt;Accounting for users who dont grasp things very quickly: The demographics of our user base are not known for their technological expertise - &lt;strong&gt;special care and consideration&lt;/strong&gt; had to be taken in order to place things in a suitable position, with sufficient instruction available&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;personal-development&quot;&gt;Personal development&lt;/h2&gt;
+&lt;p&gt;I learned alot here, namely:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;How to construct a &lt;strong&gt;clean, hierarchical domain&lt;/strong&gt; with correct naming and use of inheritance, as well as when and where to create new models&lt;/li&gt;
+  &lt;li&gt;How to prioritise tasks and &lt;strong&gt;structure iterations&lt;/strong&gt; whilst accounting for user requests&lt;/li&gt;
+  &lt;li&gt;The process and considerations of developing across the full stack&lt;/li&gt;
+  &lt;li&gt;The structure of the back end and how SQL, NHibernate, ElasticSearch and the Domain interact and connect to one another&lt;/li&gt;
+  &lt;li&gt;The importance of thorough and &lt;strong&gt;well constructed unit tests&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;The product itself, whilst it might not have a UI up to recent modern standards, is wonderfully useful and contains a wide scope of features. The codebase is well written and structured and the team are all competent individuals. With some work, it has massive potential for use in the likes of schools and other institutions requiring information sharing and compliance.&lt;br /&gt;
+I have been lucky to be exposed to such a variety of technology while at GPTN and it has given me a lot of useful experience for the future!&lt;/p&gt;</content><author><name></name></author><category term="project" /><category term="JQuery" /><category term="MVC" /><category term="NHibernate" /><category term="SQL" /><category term="Domain driven design" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/gptn/logo.gif" /></entry><entry><title type="html">Moving to australia</title><link href="http://localhost:4000/moving-to-australia/" rel="alternate" type="text/html" title="Moving to australia" /><published>2017-10-02T11:40:00+02:00</published><updated>2017-10-02T11:40:00+02:00</updated><id>http://localhost:4000/moving-to-australia</id><content type="html" xml:base="http://localhost:4000/moving-to-australia/">&lt;style&gt;
+&lt;/style&gt;
+
+&lt;h2 id=&quot;the-ego&quot;&gt;The Ego&lt;/h2&gt;
+&lt;!--
+    Conducting an active life
+ --&gt;
+
+&lt;h3 id=&quot;summary&quot;&gt;Summary&lt;/h3&gt;</content><author><name></name></author><category term="lifestyle" /><summary type="html"></summary></entry><entry><title type="html">Mobile app UX rework</title><link href="http://localhost:4000/ux-rework/" rel="alternate" type="text/html" title="Mobile app UX rework" /><published>2016-11-20T14:50:00+01:00</published><updated>2016-11-20T14:50:00+01:00</updated><id>http://localhost:4000/ux-rework</id><content type="html" xml:base="http://localhost:4000/ux-rework/">&lt;style&gt;
+ .diagram{
+	 width:100%;
+	 max-width:640px; 
+	 display:block;
+	 margin: 0 auto;
+ }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Aug 2016 - Dec 2016&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;After my &lt;a href=&quot;/Dissertation-project&quot;&gt;dissertation project&lt;/a&gt; was complete and a working prototype for the app delivered, I began full time employment with Clarity, during the first few months of which I re-designed the UX and polished the edges of this prototype. I created a new app using &lt;strong&gt;Ionic 2&lt;/strong&gt; &lt;em&gt;(Typescript, Angular 2, Ionic Sass)&lt;/em&gt; upon its release when there was limited documentation, experimenting and finding things out the hard way with this great new framework. I highly rate &lt;a href=&quot;https://ionicframework.com/&quot;&gt;Ionic&lt;/a&gt;; it has a fantastic, dilligent team and allows you to simply create cross platform apps while utilising of a large number of native components!&lt;/p&gt;
+
+&lt;h2 id=&quot;development&quot;&gt;Development&lt;/h2&gt;
+
+&lt;h3 id=&quot;methodology&quot;&gt;Methodology&lt;/h3&gt;
+&lt;p&gt;As a working prototype had already been created, I knew all the features this new version would need to contain and so worked through the app iteratively, spending extra time where I seen fit.&lt;br /&gt;
+&lt;strong&gt;&lt;em&gt;NB&lt;/em&gt;&lt;/strong&gt;: Unfortunately I could not provide more screenshots as the API for the app and test data had been removed at the time of writing&lt;/p&gt;
+
+&lt;h3 id=&quot;re-vamping-the-landing-pages&quot;&gt;Re-vamping the landing pages&lt;/h3&gt;
+&lt;p&gt;The &lt;a href=&quot;/assets/videos/pp-ui-rework.mp4&quot; class=&quot;html5lightbox&quot;&gt;video&lt;/a&gt; below shows a demo of the intro, login, home and search pages. Note that the API for the data has been deprecated so we are without the ability to pull the content, and without it my in built storage services dont work, meaning the search page does not show previously viewed or hot topics by default as it would in a live version and there are no topics to list on the home page… but you can get the gist.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/videos/pp-ui-rework.mp4&quot; class=&quot;html5lightbox&quot;&gt;
+  &lt;img src=&quot;/assets/images/diss/play-pp-ui-rework.jpg&quot; class=&quot;centered&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Some features here:&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Responsive design accomodating various screen sizes, using cleanly structured Scss. Handling overwriting of base Ionic styling&lt;/li&gt;
+  &lt;li&gt;Css animations: To spice up page transitions and to give pages a bit of life I added various &lt;a href=&quot;/assets/images/prodigy/animations1.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;animations&quot; title=&quot;Register animations&quot;&gt;CSS keyframe animations&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/animations2.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;animations&quot; title=&quot;Homepage animations&quot;&gt;&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;Homepage loads and stores all topics in memory, utilising &lt;a href=&quot;/assets/images/prodigy/sortByPropertyPipe.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;pipes1&quot; title=&quot;Sort by propety pipe&quot;&gt;custom Angular pipes&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/topicsPipe.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;pipes1&quot; title=&quot;Topics pipe&quot;&gt;&lt;/a&gt; to sort and present correct lists to the user in topic and speciality tabs&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;search-page&quot;&gt;Search page&lt;/h3&gt;
+
+&lt;p&gt;The search page is modelled from Googles &lt;a href=&quot;https://material.io/guidelines/patterns/search.html#search-in-app-search&quot;&gt;in-app search specifications&lt;/a&gt;. When search is opened, the results show previous searches and bookmarked items, and as the user begins to search, the potential search results (topics and specialities) are filtered and the search substring highlighted. The search utilises a number of pieces of functionality:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;/assets/images/prodigy/nativeStorage.png&quot; class=&quot;html5lightbox&quot; title=&quot;Native storage service&quot;&gt;Native storage services&lt;/a&gt; using &lt;a href=&quot;https://ionicframework.com/docs/native/native-storage/&quot;&gt;Ionic native storage&lt;/a&gt; to store bookmarks and recent searches, in order to improve the UX to frequent results&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;/assets/images/prodigy/searchStringPipe.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;pipes2&quot; title=&quot;Search by string pipe&quot;&gt;Custom Angular pipes&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/highlightPipe.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;pipes2&quot; title=&quot;Highlight substring pipe&quot;&gt;&lt;/a&gt; to search, filter, order and neatly display the most relevant search results from a variety of sources&lt;/li&gt;
+  &lt;li&gt;CSS animations to provide a sleek feel to the search experience&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h3 id=&quot;nested-topic-navigation-and-displaying-deeply-nested-content&quot;&gt;Nested topic navigation and displaying deeply nested content&lt;/h3&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem 1.0: Displaying nested content&lt;/strong&gt;&lt;br /&gt;
+The content for these topics comes in the form of a nested tree structure, with nodes that could potentially be infinitely deep (although usually are only 4-5 layers). Providing a good way to handle inner topic navigation can be tricky, as well as handling this tree structure in a neat side-menu interface.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt; Recursively called partial components displaying each node and its children&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;For the side menu
+    &lt;ul&gt;
+      &lt;li&gt;&lt;a href=&quot;/assets/images/prodigy/topicNavMenu.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;navMenu&quot; title=&quot;Topic nav menu call&quot;&gt;Recursive navigation nodes&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/topicNavNested.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;navMenu&quot; title=&quot;Recursive menu call&quot;&gt;&lt;/a&gt; which contain properties which set their style (active, child of active etc)&lt;/li&gt;
+      &lt;li&gt;When a node is selected it emits an event that is &lt;a href=&quot;/assets/images/prodigy/selectNode.png&quot; class=&quot;html5lightbox&quot; title=&quot;Node selected&quot;&gt;handled by the controller&lt;/a&gt; which sets up the properties on the nodes for styling purposes&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;For the content
+    &lt;ul&gt;
+      &lt;li&gt;Recursive content display nodes, developed much like the above, displaying a bespoke grouping of information when a node at each level is selected&lt;/li&gt;
+      &lt;li&gt;Topic controller &lt;a href=&quot;/assets/images/prodigy/itemSelected.png&quot; class=&quot;html5lightbox&quot; title=&quot;Itme selected&quot;&gt;subscribes&lt;/a&gt; to an observable which lets it know when a node has been selected, and it presents content accordingly&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem 1.1: Communicating navigation menu with content&lt;/strong&gt;&lt;br /&gt;
+Ionics side menu (where the topics navigation menu resides) must be defined from the root component as it is static and not unique to each navigated page. Therefore there needed to be some service which could communicate with both components, and retain the current state of the menu.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt; I set up &lt;a href=&quot;/assets/images/prodigy/navStateInterface.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;navState&quot; title=&quot;Nav state interface&quot;&gt;a navigation ‘state’&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/navStateObjects.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;navState&quot; title=&quot;Nav state objects&quot;&gt;&lt;/a&gt; to provide a layer of communication between the root component and the topic view page. It has a method which is able to be called from the recursive navigation nodes via the root component which selects the item&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Problem 2: Accounting for deep inter-topic navigation&lt;/strong&gt;&lt;br /&gt;
+Each of the CKS topics can link to one another, which should be ok… however as with the problem in 1.1, we can’t just create a new side menu for the new topic because it is a static menu. So we needed to find a way to update this menu when each topic is navigated to.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Solution:&lt;/strong&gt; Persisting an array of menu objects in the navigation state, managed from the &lt;a href=&quot;https://ionicframework.com/docs/api/navigation/NavController/&quot;&gt;ionic lifecycle hooks&lt;/a&gt; on the topic component&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;/assets/images/prodigy/topicLifecycleDidLoad.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;lifecycle&quot; title=&quot;IonViewDIdLoad&quot;&gt;Implemented a number of lifecycle hooks&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/topicLifecycleEnter.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;lifecycle&quot; title=&quot;WillEnter&quot;&gt;&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/topicLifecycleLeave.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;lifecycle&quot; title=&quot;Ion view Leave&quot;&gt;&lt;/a&gt;&lt;a href=&quot;/assets/images/prodigy/navStateObjects.png&quot; class=&quot;html5lightbox&quot; data-group=&quot;lifecycle&quot; title=&quot;Menu commands&quot;&gt;&lt;/a&gt; which communicated with &lt;a href=&quot;/assets/images/prodigy/navStateInterface.png&quot; class=&quot;html5lightbox&quot; title=&quot;Nav observables&quot;&gt;observables on the state&lt;/a&gt; to manage the current menu state&lt;/li&gt;
+&lt;/ul&gt;</content><author><name></name></author><category term="project" /><category term="Design" /><category term="CSS" /><category term="Mobile UX" /><category term="Ionic" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/prodigy/logo.jpg" /></entry><entry><title type="html">Providing mobile access to clinical data in challenging environments</title><link href="http://localhost:4000/dissertation-project/" rel="alternate" type="text/html" title="Providing mobile access to clinical data in challenging environments" /><published>2016-07-20T14:40:00+02:00</published><updated>2016-07-20T14:40:00+02:00</updated><id>http://localhost:4000/dissertation-project</id><content type="html" xml:base="http://localhost:4000/dissertation-project/">&lt;style&gt;
+ .diagram{
+	 width:100%;
+	 max-width:640px; 
+	 display:block;
+	 margin: 0 auto;
+ }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;when&quot;&gt;When&lt;/h2&gt;
+&lt;p&gt;Dec 2015 - Jun 2016&lt;/p&gt;
+
+&lt;h2 id=&quot;what&quot;&gt;What&lt;/h2&gt;
+&lt;p&gt;I teamed up with my previous employers &lt;a href=&quot;https://www.clarity.co.uk/&quot;&gt;Clarity Informatics&lt;/a&gt; to develop a cross platform mobile solution that would enable users of their &lt;a href=&quot;https://www.clarity.co.uk/clinical-knowledge-summaries/&quot;&gt;Clinical Knowledge Summaries (CKS)&lt;/a&gt; to access the provided content, particularly accounting for those users with intermittent or non functioning network connections.&lt;/p&gt;
+
+&lt;h2 id=&quot;why&quot;&gt;Why&lt;/h2&gt;
+&lt;p&gt;It was the third year of my BSc Comp Sci and for my dissertation I wanted to get some experience developing mobile apps. I contacted Clarity, with whom I had built a good relationship the previous year on placement, who described to me their problem and offered to put me back on the books. &lt;br /&gt;
+Essentially Clarity produce a large amount of high quality clinical data in the form of &lt;a href=&quot;https://www.clarity.co.uk/clinical-knowledge-summaries/&quot;&gt;CKS&lt;/a&gt; topics (e.g. Asthma, Meningitis) which are used by primary health care professionals globally to assist their day to day work in making informed diagnosis and prescribing of patients (some cases in crucial or time constrained environments). So we have a large amount of structured information which requires an active internet connection to view, and the possibility of users needing urgent access in the presence of intermittent or non functioning networks. My job was to develop a prototype solution that will allow users even in complex environments to have the information they need to treat their patients. Merely downloading all topics at once was not feasible due to their size and constant update process.
+You can read more on the context of the problem &lt;a href=&quot;/assets/documents/Project_Proposal.pdf&quot;&gt;in my project proposal&lt;/a&gt; or &lt;a href=&quot;/assets/documents/Dissertation.pdf&quot;&gt;in my full dissertation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2 id=&quot;development&quot;&gt;Development&lt;/h2&gt;
+
+&lt;h3 id=&quot;methodology&quot;&gt;Methodology&lt;/h3&gt;
+&lt;p&gt;An Agile development methodology was adopted here, beginning with system planning and rapid prototyping in order to get the app into a somewhat workable state. I then compiled a list of the possible complex end user scenarios, analysed the functionality requirements needed to serve content to the user, and then iteratively satisfied each use case, as outlined &lt;a href=&quot;/assets/images/diss/agile-plan.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 1&quot; data-description=&quot;Agile development plan&quot;&gt;in this diagram.&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;architecture-and-technology&quot;&gt;Architecture and Technology&lt;/h3&gt;
+&lt;p&gt;In order to achieve cross platform compatibility, the core of the application was developed using &lt;strong&gt;&lt;a href=&quot;https://ionicframework.com/&quot;&gt;Ionic v1&lt;/a&gt;&lt;/strong&gt; and &lt;strong&gt;&lt;a href=&quot;https://cordova.apache.org/&quot;&gt;Cordova&lt;/a&gt;&lt;/strong&gt; which allow you do develop hybridly using &lt;strong&gt;HTML, CSS and AngularJS&lt;/strong&gt; and then build native packages for &lt;strong&gt;Android, iOS and Windows&lt;/strong&gt; (Note: A second version of the app was developed in &lt;strong&gt;Ionic 2&lt;/strong&gt; - detailed &lt;a href=&quot;http://localhost:4000/UX-rework&quot;&gt;in another post&lt;/a&gt;).&lt;br /&gt;
+The content for the CKS topics was stored in a &lt;strong&gt;SQL&lt;/strong&gt; database and accessed via a &lt;strong&gt;C# .NET Web API&lt;/strong&gt; both hosted in an &lt;strong&gt;&lt;a href=&quot;https://azure.microsoft.com/en-gb/services/app-service/web/&quot;&gt;Azure&lt;/a&gt; service&lt;/strong&gt;, allowing for fast retrieval of data and easy API updates.&lt;br /&gt;
+In order to save data internally, for caching and UX purposes, I made use of a &lt;strong&gt;SQL plugin&lt;/strong&gt; &lt;a href=&quot;https://ionicframework.com/docs/native/sqlite/&quot;&gt;SQLite&lt;/a&gt;. Raw SQL was used here to create structured tables with a memory limit and fast retrieval time.&lt;br /&gt;
+&lt;em&gt;Keywords: HTML, CSS, JavaScript, AngularJS, Ionic, Cordova, C#, .NET Web API, SQL, Azure&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/diss/architecture.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 2&quot; data-description=&quot;System architecture&quot;&gt;
+	&lt;img src=&quot;/assets/images/diss/architecture.png&quot; class=&quot;diagram&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;how-i-solved-the-problem&quot;&gt;How I solved the problem&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;Caching to reduce request frequency
+    &lt;ul&gt;
+      &lt;li&gt;After &lt;a href=&quot;/assets/images/diss/db-comp.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 3&quot; data-description=&quot;Database comparison&quot;&gt;analysis&lt;/a&gt; of various internal DB options, SQLite was installed in order to cache each topic that was requested. If a topic was already in the cache, it would load from memory instead of sending a GET request&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Breaking down HTTP response size
+    &lt;ul&gt;
+      &lt;li&gt;CKS Topics have 11 base sections, which I &lt;a href=&quot;/assets/images/diss/topic-breakdown.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 4&quot; data-description=&quot;Breakdown of topic sections&quot;&gt;divided up into 4 chunks&lt;/a&gt; to minimise the size of the response, which was found to be the most optimal separation(see here). Updating the SQL DB and API, I was able to allow the user to only request the section they were wishing to view. The internal storage was updated for this new format and optimised by introducing a max amount of storage&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Saving and bookmarking of content
+    &lt;ul&gt;
+      &lt;li&gt;Making use of the underlying technology for caching, I added functionality to let the users save particular topics to an un-capped persistent SQL DB for quick and easy access. They can also bookmark particular sections within these topics for fast access&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Location based push functionality&lt;/strong&gt;
+    &lt;ul&gt;
+      &lt;li&gt;It was seen as a very useful service for us to be able to inform users of outbreaks or epidemics within x miles of their geolocation, with the aim to ensure that not only are primary healthcare professionals aware of the outbreak, but they have the correct knowledge and tools to make the most informed decisions&lt;/li&gt;
+      &lt;li&gt;Upon loading the app, each users mobile details alongside GPS co-ordinates were &lt;a href=&quot;/assets/images/diss/push-save.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 5&quot; data-description=&quot;Workflow to save users details&quot;&gt;sent to our user storage DB on Azure&lt;/a&gt;. If an outbreak was to occur, I could query the API with some co-ordinates and a search radious and it would return us a list of the user tokens within that range. A script could then be run to create a POST request containing the push notification and its payload, which would then be sent out to all of the users in the area, making use of Ionics native push notification plugin.&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Persisting of evidence
+    &lt;ul&gt;
+      &lt;li&gt;As the content is evidence based clinical guidance information, users will need to gain access to it in order to fact check what they are reading. I added a simple network connection check, if the user was offline then they would be prompted to save the evidence link to their reading list for future use&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;You can view code snippets for most things mentioned above in my &lt;a href=&quot;/assets/documents/Dissertation.pdf&quot;&gt;dissertation - see ch 3.4 and corresponding appendix figures&lt;/a&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;testing&quot;&gt;Testing&lt;/h3&gt;
+&lt;p&gt;A bottom-up testing approach was executed and &lt;a href=&quot;/assets/documents/Dissertation.pdf&quot;&gt;detailed in my dissertation&lt;/a&gt;, beginning with unit testing of all items in the application. These units were then compiled together and each feature or piece of functionality present in the application was tested. Following these tests End-to-End testing was conducted to ensure that the whole system was compliant and friendly with each other and worked as expected.&lt;/p&gt;
+
+&lt;h3 id=&quot;challenges-overcome&quot;&gt;Challenges overcome&lt;/h3&gt;
+&lt;ul&gt;
+  &lt;li&gt;Learning Ionic and Cordova from scratch, especially close after release without too much documentation. The time it takes to make mistakes and learn in development can quickly add up. During development Ionic deprecated a lot of their Beta code on v1 release which set me back&lt;/li&gt;
+  &lt;li&gt;Accounting for and analysing all potential use cases&lt;/li&gt;
+  &lt;li&gt;Restructuring of the large amount of data held by Clarity. When implementing features like ‘onclick’ methods into the html for topic navigation, the data itself had to be edited. A pipe is needed to transform old data into an app acceptable version&lt;/li&gt;
+  &lt;li&gt;Ensuring web services were up and running and could operate in a test environment&lt;/li&gt;
+  &lt;li&gt;Displaying a large amount of content on the page in a structured manner. While I struggled with this in the first iteration, a &lt;a href=&quot;http://localhost:4000/UX-rework&quot;&gt;UX rework&lt;/a&gt; conducted in a less time constrained environment produced better results&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;Overall I ended up with a good prototype - fit for purpose. The location based push functionality proved to be the most useful when it came to alerting users in need. Time constraints meant I could not refine the UI although luckily I &lt;a href=&quot;http://localhost:4000/UX-rework&quot;&gt;came back to it later&lt;/a&gt;. I learned a lot through this project and it was so beneficial to gain experience building an app from start to finish!&lt;/p&gt;
+
+&lt;h2 id=&quot;files&quot;&gt;Files&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;/assets/documents/Dissertation.pdf&quot; download=&quot;&quot;&gt;:file_folder:Dissertation PDF&lt;/a&gt;&lt;br /&gt;
+&lt;a href=&quot;/assets/images/diss/project-poster.jpg&quot; class=&quot;html5lightbox&quot;&gt;
+  :page_facing_up:Dissertation project poster
+&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;/assets/images/diss/architecture.png&quot; class=&quot;html5lightbox&quot; title=&quot;Figure 2&quot; data-description=&quot;System architecture&quot;&gt;
+	&lt;img src=&quot;/assets/images/diss/architecture.png&quot; class=&quot;diagram&quot; /&gt;
+&lt;/a&gt;&lt;/p&gt;</content><author><name></name></author><category term="project" /><category term="Ionic" /><category term="Location based content" /><category term="Offline access" /><category term="SQL" /><summary type="html"></summary><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:4000/assets/images/diss/logo.jpg" /></entry><entry><title type="html">Lucid dreaming</title><link href="http://localhost:4000/thoughts-on-lucid-dreaming/" rel="alternate" type="text/html" title="Lucid dreaming" /><published>2016-02-18T11:40:00+01:00</published><updated>2016-02-18T11:40:00+01:00</updated><id>http://localhost:4000/thoughts-on-lucid-dreaming</id><content type="html" xml:base="http://localhost:4000/thoughts-on-lucid-dreaming/">&lt;style&gt;
+img { width: 75%; margin: 0 auto; display: block; }
+&lt;/style&gt;
+
+&lt;h2 id=&quot;consciousness&quot;&gt;Consciousness&lt;/h2&gt;
+
+&lt;p&gt;Freud’s &lt;a href=&quot;http://www.simplypsychology.org/unconscious-mind.html&quot;&gt;theory&lt;/a&gt; of the conscious mind and all mental processes within it being just the tip of the iceberg with regards to what is going on inside our minds has resonated within me over the past few years. It is a fascinating albeit somewhat unnerving prospect that our conscious actions and thoughts are dictated by our un-conscious, or at least influenced heavily by it. So how do we know which of our thoughts are organic and which are a product of our unnavigated mind? (This might be a discussion for another day)&lt;/p&gt;
+
+&lt;p&gt;When you sleep, your conscious mind turns itself off and sleeps while your subconscious mind remains awake creating dreamworlds in which you experience a series of thoughts, images, and sensations. The theme or setting of these dreams doesn’t just come out of nowhere, it is influenced by your life, what is stressing you out, what you are afraid of, what you fantasize about, and can be presented to you symbolically or realistically. Sometimes dreams can be a wonderful experience in which you act out a role you have always wanted, and sometimes you can wake up in a cold sweat from a scary experience.&lt;/p&gt;
+
+&lt;p&gt;What if I told you it was possible to retain consciousness whilst in these dreams, a place where one was not bound by the laws of physics or society, where it was possible to do &lt;strong&gt;anything&lt;/strong&gt; or fly &lt;strong&gt;anywhere&lt;/strong&gt; one desired, where you could delve into the meanings of your symbolic dreams and consciouslly interact with your subconscious, feeling real emotions and experiencing (&lt;em&gt;what feel like&lt;/em&gt;) real situations, and remember it all when you wake up!&lt;/p&gt;
+
+&lt;h2 id=&quot;enter-lucid-dreaming&quot;&gt;Enter lucid dreaming&lt;/h2&gt;
+
+&lt;p&gt;Well it is, Lucid Dreaming provides a platform from which the individual can converse with and explore their unconscious mind…&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Lucid Dreaming - conscious awareness during the dream state - is an exhilarating experience. Because the world you are experiencing is one of your own creation, you can do the impossible and consciously influence the outcome of your dreams.
+-Stephen LaBerge&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;After recently coming across the &lt;a href=&quot;http://www.reddit.com/r/luciddreaming&quot;&gt;sub-reddit&lt;/a&gt; for lucid dreaming, I was directed towards Stephen LaBerge’s &lt;a href=&quot;http://www.amazon.co.uk/Exploring-World-Dreams-Stephen-LaBerge/dp/034537410X/ref=sr_1_1?s=books&amp;amp;ie=UTF8&amp;amp;qid=1454502886&amp;amp;sr=1-1&quot;&gt;book&lt;/a&gt; ‘Exploring the World of Lucid Dreaming’. One which I would now highly recommend. LaBerge has created a science out of lucidity, and explains in great detail the techniques involved in inducing lucid dreams and the benefits in interacting with the dream itself.&lt;/p&gt;
+
+&lt;p&gt;I have used his techniques to induce Lucid Dreams of my own, in which I have flown across countries, ski’d down incredible mountains, teleported, met people I look up to, etc.. They have been exceptionally enjoyable experiences.&lt;/p&gt;
+
+&lt;h3 id=&quot;how-do-you-do-it&quot;&gt;How do you do it?&lt;/h3&gt;
+
+&lt;p&gt;In short, a lucid dream is initialised by realising while you are dreaming, that you are in fact in a dreamworld. In theory it is simple, but in practice.. not so much. When we dream, our minds attempt to rationalise or justify everything it comes across, no matter how bizarre. These bizarre occurances, like interacting with somebody who is deceased, are things we can use to realise we are dreaming. Anyway, below I will outline the steps I used to attain my first lucid dream.&lt;/p&gt;
+
+&lt;h4 id=&quot;step-1---improving-your-dream-recall&quot;&gt;Step 1 - Improving your dream recall&lt;/h4&gt;
+
+&lt;p&gt;Being able to remember your dreams once you’ve had them is a pre-requisite to lucid dreaming (naturally).&lt;/p&gt;
+
+&lt;p&gt;How - &lt;strong&gt;Keep a dream diary&lt;/strong&gt;, every time you wake up in the morning (or through the night) attempt to recall the dream from which you woke. Write down what you remember, and try to think as far back as possible. Remember things that happen often, these are &lt;strong&gt;dream signs&lt;/strong&gt;&lt;br /&gt;
+Goal - Be able to recall at least 1 dream a night, with the ability to think back long enough for a decent story to take place.&lt;/p&gt;
+
+&lt;h4 id=&quot;step-2---reality-checking&quot;&gt;Step 2 - Reality checking&lt;/h4&gt;
+
+&lt;p&gt;Essentially you are checking that you aren’t dreaming, you ask yourself “Am I dreaming or awake?”, look around for oddities or inconsistencies that might indicate you are dreaming, think back to the events of the last several minutes, if you are having trouble then you may be dreaming. To solve this question you can also find some writing, read it, look away, and attempt to read it again, if the words haven’t mutated in some way, you are still awake!&lt;/p&gt;
+
+&lt;p&gt;Do this as often as you can throughout the day, at least 10 times a day. It is easier to keep track if you decide to do the test every time you speak to someone or open a door (for example).&lt;/p&gt;
+
+&lt;h4 id=&quot;step-3---induce-the-dream&quot;&gt;Step 3 - Induce the dream&lt;/h4&gt;
+
+&lt;p&gt;Before you go to bed, tell youself “Tonight I will realise I am dreaming”. &lt;br /&gt;
+&lt;em&gt;&lt;strong&gt;Every&lt;/strong&gt; time&lt;/em&gt; you wake up during the night: &lt;br /&gt;
+	1. Remember the dream from which you awoke &lt;br /&gt;
+	2. Tell yourself you will realise you are dreaming when you fall back asleep&lt;br /&gt;
+	3. Picture yourself back in the dream&lt;br /&gt;
+	4. Go about until you find a &lt;strong&gt;dream sign&lt;/strong&gt;&lt;br /&gt;
+	5. Conduct a reality check, and then imagine yourself flying, or whatever you intend to do when you are dreaming.&lt;br /&gt;
+	6. Repeat 1-5&lt;br /&gt;&lt;/p&gt;
+
+&lt;p&gt;Your transition from waking life to the dream state will be smooth, you won’t even notice it. And you will be there, in the dream, fully conscious, with the resources and ability to explore and do anything you want.&lt;/p&gt;
+
+&lt;h3 id=&quot;why-bother&quot;&gt;Why bother?&lt;/h3&gt;
+
+&lt;p&gt;Not only is lucid dreaming fun but its also incredly rewarding, it can be used for personal advancement, increasing self confidence, rehearsing situations for life, creatively solving problems and personally healing! It is a funny thought that one can access and utilise the vast knowledge stored in their unconscious mind (which they may have obtained without conscious knowledge) to solve complex problems that they may struggle to do only relying on their conscious mind.&lt;/p&gt;
+
+&lt;p&gt;Anyway, one story from Stephen Laberge’s book really caught my attention, in which a dreamer uses their time asleep to become a master of their profession!&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;I discovered in high school that I was a lucid dreamer when I learned that I could study complicated mathematical and geometry problems before going to bed and discovered that I was able to solve the problems when I awakened.&lt;br /&gt;
+This phenomenon followed me through college and medical school. When I was in medical school, I began to apply my sleep-solving abilities to medical problems, quickly running through the questions of the day and usually finding useful solutions or useful additional questions in the process (even today I will occasionally wake up at 3:00 in the morning and call the hospital to order a special laboratory test of a problem patient, the possible solution of which had occurred to me in a lucid dream).&lt;br /&gt;
+At this point, the greatest use to which I have been able to put this facility is in the practice of surger. Each night before retiring I review my list of surgical cases and I actually practice these cases in my sleep. I have gained a reputation for being a rapid and skilled surgeon with almost no major complications. This surgical “practice” has allowed me from the very beginning to constantly review the anatomy and to refine and polish technique by eliminating unncessary motions. I am presently able to perform most makor complex procedures in 35 to 40 percent of the time taken by most of my peers. (R.v., Aikem, So Cal)&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h3 id=&quot;summary&quot;&gt;Summary&lt;/h3&gt;
+
+&lt;p&gt;Lucid Dreaming is awesome! Try it!&lt;/p&gt;</content><author><name></name></author><category term="blog" /><category term="dreams" /><category term="lifestyle" /><summary type="html"></summary></entry></feed>

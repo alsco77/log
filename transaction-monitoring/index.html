@@ -25,19 +25,22 @@
     <meta property="og:type" content="profile">
 
     <!-- Begin Jekyll SEO tag v2.5.0 -->
-<title>Alex Scott | A blog about my life as a remote web and blockchain developer</title>
+<title>Monitoring DApp transactions on the backend to enforce business logic | Alex Scott</title>
 <meta name="generator" content="Jekyll v3.7.4" />
-<meta property="og:title" content="Alex Scott" />
+<meta property="og:title" content="Monitoring DApp transactions on the backend to enforce business logic" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="A blog about my life as a remote web and blockchain developer" />
 <meta property="og:description" content="A blog about my life as a remote web and blockchain developer" />
-<link rel="canonical" href="http://localhost:4000/404.html" />
-<meta property="og:url" content="http://localhost:4000/404.html" />
+<link rel="canonical" href="http://localhost:4000/transaction-monitoring/" />
+<meta property="og:url" content="http://localhost:4000/transaction-monitoring/" />
 <meta property="og:site_name" content="Alex Scott" />
-<meta name="twitter:card" content="summary" />
+<meta property="og:image" content="http://localhost:4000/assets/images/thumbnails/monitor.png" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2018-10-01T14:40:00+02:00" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:site" content="@" />
 <script type="application/ld+json">
-{"@type":"WebPage","url":"http://localhost:4000/404.html","headline":"Alex Scott","description":"A blog about my life as a remote web and blockchain developer","@context":"http://schema.org"}</script>
+{"@type":"BlogPosting","image":"http://localhost:4000/assets/images/thumbnails/monitor.png","url":"http://localhost:4000/transaction-monitoring/","dateModified":"2018-10-01T14:40:00+02:00","datePublished":"2018-10-01T14:40:00+02:00","headline":"Monitoring DApp transactions on the backend to enforce business logic","description":"A blog about my life as a remote web and blockchain developer","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/transaction-monitoring/"},"@context":"http://schema.org"}</script>
 <!-- End Jekyll SEO tag -->
 
     
@@ -61,7 +64,7 @@
 <meta name="msapplication-square310x310logo" content="mstile-310x310.png" />
 
 
-    <link rel="canonical" href="http://localhost:4000/404.html">
+    <link rel="canonical" href="http://localhost:4000/transaction-monitoring/">
     <link rel="alternate" type="application/rss+xml" title="" href="http://localhost:4000/feed.xml" />
     <!-- <link href="http://localhost:4000/assets/plugin/lightbox2/dist/css/lightbox.min.css" rel="stylesheet"> -->
     <script type="text/javascript" src="http://localhost:4000/assets/plugin/html5lightbox/jquery.js"></script>
@@ -1483,20 +1486,725 @@ pre {
 
     <div class="wrapper-large">
         
-            
-                <div class="page ">
-            
+            <div class="post">
         
 
-            <section class="lost-container">
-  <h1>Uh oh!</h1>
-  <div class="link">
-    <img class="selfie" alt="Alex Scott" src="http://localhost:4000/assets/images/error.gif" />
-  </div>
-  <br />
-  <br />
-  <a href="/">Take me home!</a>
+            
+
+
+
+<nav class="nav">
+    <ul class="list">
+    </ul>
+</nav>
+
+
+
+
+    <img class="title-image" src="/assets/images/thumbnails/monitor.png" alt="Monitoring DApp transactions on the backend to enforce business logic">
+
+
+<h1 class="title">Monitoring DApp transactions on the backend to enforce business logic</h1>
+
+<span class="date">
+    <time datetime="01-10-2018">Monday. October 01, 2018</time>
+     - <span class="reading-time" title="Estimated read time">
+    
+
+    
+        3 mins
+    
+</span>
+
+</span>
+
+
+    <div class="post-tags">
+        
+            <a class="item" href="http://localhost:4000/tags/#ethereum">Ethereum</a>
+        
+            <a class="item" href="http://localhost:4000/tags/#geth">Geth</a>
+        
+            <a class="item" href="http://localhost:4000/tags/#microservices">Microservices</a>
+        
+            <a class="item" href="http://localhost:4000/tags/#robust">Robust</a>
+        
+    </div>
+
+
+<style>
+    .center-image{
+        margin: 0 auto;
+        display: flex;
+    }
+</style>
+
+<h2 id="when">When</h2>
+<p>Sep 2018 - Oct 2018</p>
+
+<h2 id="what">What</h2>
+<p>Golang microservices that monitor the state of various Ethereum transactions, executing some business logic and updating our cloud firestore based on their status and the resulting state of the blockchain.</p>
+
+<h2 id="why">Why</h2>
+<p>Our (hybrid) DApps core on chain functionality was an escrow system into which one party would deposit funds. Due to the app using <a href="https://firebase.google.com/docs/firestore/">firestore</a> as a database, it was thus important that its state reflected that of the on chain escrow. Having a pure client side mechanism for managing this state opened up many UX problems, for example: user A sends a tx to our escrow and his browser closes while the tx is pending - in this scenario the data would remain out of sync until either party next attempts to check the state (in addition, we would need to aso create this mechanism which would bloat the UX). We needed some mechanism that maintained high UX while securely enforcing our business rules.</p>
+
+<p>Benefits of using server:</p>
+<ul>
+  <li>Maintain business logic in one place</li>
+  <li>Provide robustness / mitigate potential security issues</li>
+  <li>Ensure that our corresponding services execute correctly (SendGrid for email notifications)</li>
+</ul>
+
+<h2 id="how">How</h2>
+
+<p>Tl;dr user sends the transaction to Ethereum &gt; txHash is intercepted and sent for monitoring alongside some contextual info &gt; upon completion/error, resulting smart contract state is read and propagated to dapp/users via database write and email service interaction</p>
+
+<p><img src="http://localhost:4000/assets/images/blockchain/monitor-architecture.png" alt="Transaction monitoring architecture" class="center-image" /></p>
+<figcaption class="caption">Architecture</figcaption>
+
+<ol>
+  <li>Escrow deposit transaction is executed via our payment library (utilising web3) and the resulting tx hash is returned and sent to the transaction monitor alongside some contextual information
+    <ul>
+      <li>JS Payment library / <a href="https://www.npmjs.com/package/web3">web3</a></li>
+    </ul>
+  </li>
+  <li>Transaction monitor receives request from client, saves the transaction details in a SQL table and polls the status of the transaction. When it has been accepted or rejected, we communicate this information forward
+    <ul>
+      <li>Microservice on GCP</li>
+      <li>Golang/SQL/(Etherscan/GETH)</li>
+    </ul>
+  </li>
+  <li>Receives notification and basic contextual information from the monitor. We can then update the transaction and escrow objects on the database (after retrieving contract state from GETH), and then communicate this information to the users by dispatching emails via SendGrid.
+    <ul>
+      <li>Microservice on GCP</li>
+      <li>Golang/GETH/Firebase/Sendgrid</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="supplementary-architecture">Supplementary architecture</h3>
+<p>In the case of something failing (either in the initial client-server API call, or the server itself, or node sync issue), a ‘state-cleaner’ endpoint that ensures basic contract state is reflected in the database can be called. In our case, we asynchronously hit this endpoint each time the escrow component is loaded, as a fallback mechanism</p>
+
+<h3 id="requirements">Requirements</h3>
+<p>Trustworthy Ethereum node - if it is out of sync (i.e. hasn’t received recent blocks) then we will get fed back incorrect information - this is another case of when a fallback mechanism has proven useful</p>
+
+<h3 id="potential-improvements">Potential improvements</h3>
+<p>Consolidate functionality and reduce overhead by polling the contract and reverse-engineering the state as opposed to sending the transactions individually/manually to the monitor. In this scenario we would monitor the contract itself (the source of truth), retrieve any new transactions, extract their transaction data and match it up with records in our firebase DB, enforcing the same logic as in the current implementation. In addition, this would allow us to monitor the transactions sent to our contract from other locations</p>
+
+<h2 id="links">Links</h2>
+<p><a href="https://gitlab.com/alsco77/ethereum-transaction-monitor">Monitor</a>
+<a href="https://gitlab.com/alsco77/transaction-callback-api">State manager</a></p>
+
+<h2 id="thoughts">Thoughts</h2>
+<ul>
+  <li>Golang and GCP == awesome</li>
+</ul>
+
+
+
+
+
+
+
+<style>
+        .email {
+            padding: 5px;
+            height:16px;
+            /* border: 2px solid #222222; */
+            /* border-radius: 1px; */
+        }
+    
+        .submit {
+      font-family: 'Hind Guntur', sans-serif;
+      font-size: 15px;
+      line-height: 0.6;
+      color: #fff;
+      letter-spacing: 0.025em;
+    
+      background: #379aff;
+      padding: 11px 0 11px;
+      cursor: pointer;
+      border: 0;
+      border-radius: 3px;
+      min-width: 110px;
+      overflow: hidden;
+    
+      position: relative;
+      top: 0px;
+    }
+    
+    .submit span {
+      display: block;
+      position: relative;
+      z-index: 10;
+    }
+    
+    .submit:after,
+    .submit:before {
+      padding: 11px 0 11px;
+      content: '';
+      position: absolute;
+      top: 0;
+      left: calc(-100% - 30px);
+      height: calc(100% - 22px);
+      width: calc(100% + 20px);
+      color: #fff;
+      border-radius: 2px;
+      transform: skew(-25deg);
+    }
+    
+    .submit:after {
+      background: #fff;
+      transition: left 0.8s cubic-bezier(0.86, 0, 0.07, 1) 0.2s;
+      z-index: 0;
+      opacity: 0.8;
+    }
+    
+    .submit:before {
+      background: #13c276;
+      z-index: 5;
+      transition: left 1s cubic-bezier(0.86, 0, 0.07, 1);
+    }
+    
+    .submit:hover:after {
+      left: calc(0% - 10px);
+      transition: left 0.8s cubic-bezier(0.86, 0, 0.07, 1);
+    }
+    
+    .submit:hover:before {
+      left: calc(0% - 10px);
+      transition: left 1s cubic-bezier(0.86, 0, 0.07, 1);
+    }
+    
+    </style>
+    
+    <!-- Begin Mailchimp Signup Form -->
+    <div id="mc_embed_signup" style="padding-top:40px">
+        <form action="https://alsco77.us20.list-manage.com/subscribe/post?u=9dd55b1d3439d2cc20cb193f5&amp;id=4843fe965e" method="post" id="mc-embedded-subscribe-form" name="mc-embedded-subscribe-form" class="validate" target="_blank" novalidate>
+            <div id="mc_embed_signup_scroll" style="text-align: center">
+            <small>Get notified when I post something!</small>
+            <br/>
+            <div>
+                <div class="mc-field-group" style="display:inline-flex">
+                    <label for="mce-EMAIL" style="display:none">Email Address </label>
+                    
+                    <input type="email" value="" name="EMAIL" class="required email " id="mce-EMAIL" placeholder="Your email...">
+                </div>
+                    <button type="submit" value="Subscribe" name="subscribe" id="mc-embedded-subscribe" class="button submit"><span>Sign up</span></button>
+            
+            </div>
+        
+            <div id="mce-responses" class="clear">
+                <div class="response" id="mce-error-response" style="display:none"></div>
+                <div class="response" id="mce-success-response" style="display:none"></div>
+            </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+            <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_9dd55b1d3439d2cc20cb193f5_4843fe965e" tabindex="-1" value=""></div>
+            
+            </div>
+        </form>
+    </div>
+    
+    <!--End mc_embed_signup-->
+
+
+    <div class="related">
+    
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+                    
+                    <h4>Related Posts</h4>
+                    <ul>
+                    
+                    <li class="relatedPost">
+                        <a href="http://localhost:4000/price-oracle/">Leveraging Bancor to provide on chain ERC20 price oracle
+                        
+                        </a>
+                    </li>
+                    
+                    
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+                    
+                    <li class="relatedPost">
+                        <a href="http://localhost:4000/crow-storm-app/">Crow Storm 🎯
+                        
+                        </a>
+                    </li>
+                    
+                    
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+        
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+            
+                
+            
+                
+            
+                
+            
+                
+            
+        
+    
+    
+        </ul>
+    
+</div>
+
+
+
+
+
+
+    <section class="disqus">
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+
+        var disqus_config = function () {
+            this.page.url = 'http://localhost:4000/transaction-monitoring/';
+            this.page.identifier = '/transaction-monitoring';
+        };
+        var disqus_shortname = 'alexscott';
+        var disqus_developer = 0;
+        (function() {
+            var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+            dsq.src = 'https://' + disqus_shortname + '.disqus.com/embed.js';
+            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
 </section>
+
+
+
+
+<footer class="footer-main">
+    Alex Scott © 2019 <a class="link" href="http://localhost:4000/feed.xml" target="_blank"><svg class="icon icon-rss"><use xlink:href="#icon-rss"></use></svg></a>
+</footer>
+
+
         </div>
     </div>
 
