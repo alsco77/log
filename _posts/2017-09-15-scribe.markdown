@@ -1,0 +1,150 @@
+---
+title: "Scribe"
+layout: post
+date: 2015-09-15 14:40
+image: /assets/images/scribe/balloon.jpg
+headerImage: true 
+wide: true
+tag:
+- Angular
+- C#
+- Collaborative content creation
+- End-to-end
+- Agile
+category: project
+subCategory: web
+---
+
+<style>
+ .diagram{
+	 max-width:640px; 
+	 display:block;
+	 margin-left: auto;
+	 margin-right: auto;
+ }
+</style>
+
+<!-- Should I be including more code?  -->
+
+## When
+Aug 2014 - Aug 2015  
+University placement year
+
+## What
+<a href="/assets/images/scribe/login.png" class="html5lightbox" title="Login">Welcome to Scribe</a> - a bespoke content management system from which to create, review and export content for [Clarity](http://www.clarity.co.uk)'s [Clinical Knowledge Summaries (CKS)](https://www.clarity.co.uk/clinical-knowledge-summaries/). Each CKS is a large, structured, evidence based report on a particular clinical topic, containing a number of clinical references. Scribe is essentially an authoring tool for these documents, coming in the form of a web app. It provides the following features for authoring:
+
+ - Document version control
+ - <a href="/assets/images/scribe/openingTopicAndEditing.mp4" class="html5lightbox" title="Go to edit content">Rich text editing</a> including reference creation and inter-document navigation
+ - Multi user collaboration
+ - Document editing/previewing/reviewing/exporting
+ - <a href="/assets/images/scribe/commentsView.png" class="html5lightbox" title="Overviewing comments">Commenting</a> and highlighting content
+ - Document structure <a href="/assets/images/scribe/publishedTemplates.png" class="html5lightbox" data-group="templates" title="Published template lists">defining and templating</a><a href="/assets/images/scribe/publishedTemplateEdit.png" class="html5lightbox" data-group="templates" title="Edit template"></a><a href="/assets/images/scribe/publishedTemplateEditFields.png" class="html5lightbox" data-group="templates" title="Edit template fields"></a>
+ - Multiple <a href="/assets/images/scribe/authoringPagesList.png" class="html5lightbox" data-group="authPages" title="Authoring page list">'authoring pages'</a><a href="/assets/images/scribe/authoringPagesEdit.png" class="html5lightbox" data-group="authPages" title="Authoring page edit"></a> for producing different document types  
+ - UX features conforming to modern standards and a UI built with brand new technology
+
+Each 'document' in our system is named a 'dossier', containing a <a href="/assets/images/scribe/topicViewMenu.png" class="html5lightbox" title="Item menu">tree hierarchy of 'items'</a>, each containing 0 or more 'fields' which contain the actual HTML content for the document. Each of these entities can be added, edited, moved and removed. 
+
+
+## Why
+Previously the CKS topics had been created using a piece of __commercial software__ which produced a multitude of problems. Not only was it ridiculously __expensive__, but also slow, clunky, __not productive__ and was missing a number of key features. It was time to kick this old system because the __authoring team was expanding__ and a new, bespoke system tailored to the CKS requirements would help set these new authors off on the right foot. So I was brought in to assist the development of this new, streamlined version of this tool.
+
+## My role
+The team consisted of 4 members, including me there was 1 other developer, a librarian and a project administrator. My role was to:
+
+ - Analyse user stories and build/refine a feature list
+ - Design and __develop an end to end solution__ to satisfy feature list
+ - Communicate progress and plan development with project lead and developer
+
+
+## Development
+
+### Methodology
+This was very much agile development. There was a cut off date for when the old commercial software license would run out, so we distiguished the required features for the minimum viable product and worked through the list iteratively. To do this we not only diagnosed the actual functional requirements from the user stories, differentiating needs from short term fixes from the old system, but prioritised them and chose a set that would let us start getting users authoring. We communicated frequently during regular stand up meetings. 
+
+
+### Architecture and Technology
+Scribe has developed into a large application - with one main .NET solution housing a multitude of projects, so I will give a basic overview of how things are structured.  
+
+- Front end:
+   - __Angular 2__
+   - HTML / __CSS ([Material Design](https://getmdl.io/))__
+   - CKEditor for text editing  
+- Back:
+   - __ASP.Net MVC/C#__ websites and __WebAPI__/C# sites.
+   - __SignalR__
+   - __Entity Framework__ - __SQL Server__ database.
+
+There is a lot in the back end.. we created a command and event system to maintain the states of all the different entities. Basically when an action is performed (e.g. save field) a command is sent downwards to the domain which contains the aggregates and business logic to handle it and persist the field change. One or more events are then piped back (fieldUnlocked, fieldSaved) via signalr and each client is updated accordingly. These are some of the projects responsible:  
+
+ - __Client API__: Concerned with providing data for Scribe client and handling commands originating from there
+	- Web API endpoint exposing the main client API to javascript clients
+	- Web API endpoint that maintains SignalR connections to javascript clients
+	- Data entities used for client database
+ - __Core__: Collection of utility classes used throughout the framework
+    - Utility classes and extension methods relating to Microsoft Azure
+    - Classes used for handling data processing pipelines
+    - Security related classes used throughout the framework
+    - Utility methods used for core data persistence
+ - __Domain__: These projects contain the core business logic of the framework
+    - Web API endpoint that receives and processes all domain commands
+    - Contains all domain aggregates and value types, along with commands, events, handlers, and domain projections
+    - Classes for providing a custom interface to NEventStore
+    - Classes used by both the domain and client APIs for the purpose of storing analytics
+
+
+#### Previous iterations
+Before we arrived at the solution above, there were a number of technologies tried and tested. As we were just figuring things out along the way, we didn't know what the best technologies would be for our needs so we gradually improved upon the infrastucture to meet the demands of the application, refactoring as we went. These were some relics left in previous iterations:
+
+ - __Angular 1__: We built the first client using the original Angular. It was still a good technology but when Angular 2 (and material design) came out the upgrade was a no-brainer due to the addition of TypeScript and it being all round more scalable, robust and cleaner. <a href="/assets/images/scribe/old/unlockField.png" class="html5lightbox" data-group="old" title="Unlock field">Check out some of the old pics</a><a href="/assets/images/scribe/old/updateField.png" class="html5lightbox" data-group="old" title="Update field"></a><a href="/assets/images/scribe/old/publishTemplate.png" class="html5lightbox" data-group="old" title="Publish template"></a><a href="/assets/images/scribe/old/manageUsers.png" class="html5lightbox" data-group="old" title="Manage users"></a><a href="/assets/images/scribe/old/itemHierarchy.png" class="html5lightbox" data-group="old" title="Item hierarchy"></a><a href="/assets/images/scribe/old/createTemplate.png" class="html5lightbox" data-group="old" title="Create template"></a><a href="/assets/images/scribe/old/addTopic.png" class="html5lightbox" data-group="old" title="Add topic"></a><a href="/assets/images/scribe/old/addComment.png" class="html5lightbox" data-group="old" title="Add comment"></a> of the first iteration
+ - __Mercurial repos__ for version control: In hindsight this doesn't seem like a very good idea.. but initially we tried to create individual repos for each document which would allow for complete version control. This proved to be far too slow and clunky and had to go
+	- We replaced it with a __[Lucene indexing system](https://lucene.apache.org/core/)__, another relic of our finalised command and event system. Lucene was fast and efficient however after a number of our indexes became corrupted we put more of a focus on data integrity and switched up to the command and event system (each command is stored and completely replayable)
+ - __[TextAngular](http://textangular.com/)__: This was originally our rich text editor. I thought it would be the best option as it is designed specifically for AngularJs, however we changed over to CKEditor due to the larger user/knowledge base and the extensive support and robustness that comes from a large scale product
+
+#### Authoring content
+To give you an example of how the system works.. I will simply detail the process involved with opening a field for editing (most other commands/events work like this too)
+
+ 1. User selects dossier, opens item for editing 
+ 2. User selects 'edit field'
+	- Command is sent to the domain via the Client API
+	- Domain checks if the field is already locked for editing, if not then it changes the state to locked
+	- Sends event back to the client with contextual info to say field has been locked for editing
+	- Every client listening for that type of command hears it
+	- User can now edit field and all other users are locked out
+ 3. User makes changes and selects 'save field'
+	- Process above happens again and field aggregate is updated and persisted to reflect new data
+	- Field now appears unlocked on all other clients
+
+<a href="/assets/images/scribe/openingTopicAndEditing.mp4" class="html5lightbox" title="Authoring content">
+	<img src="/assets/images/scribe/playTopicVideo.jpg" class="diagram" />
+</a>
+
+
+### Challenges
+
+ - Delivering a working product in a __time constrained environment__ due to old system phase out
+	- Diagnosing the requirements of a minimum viable product
+		- Distinguishing from the user stories what was an actual functional requirement and what was just a workaround for a problem existing in the old piece of software
+    - __Managing expectations__ of project management - its very hard to put a timeframe on some tasks 
+	- Selecting the most suitable tool or strategy for the requirement
+ - Creating, managing, displaying and navigating an infinitely deep content navigation hierarchy
+ - Importing/exporting content keeping in format with a pre defined template
+	- Consequently managing and organising these defined document templates
+
+
+
+
+## Personal development
+I was very fortunate to have been the protégé of an extremely intelligent and knowledgable lead developer on this project who shared his wisdom with me throughout the year. Some things I learned:
+
+ - __Best coding practices__ to create modular, reusable, cleanly written understandable code
+ - How to handle curveballs in development and the __benefits of refactoring__ the codebase correctly accordingly
+ - __Constructing features/projects__ - starting with the most simple version of what you are trying to achieve without worrying about more complicated features. Building the core functionality and going from there. This works for simple features all the way up to large systems
+ - Selecting plugins - how to diagnose the correct plugin for the job when given multiple options (i.e. our TextAngular vs CKEditor decision)
+ - How to __analyse user stories effectively__ to extract genuine functionality requirements, and planning a system around this set of functionality
+
+
+## Conclusion
+Not only was this a __fantastic project__ for me to begin my development career (a full end to end project across the full stack) but it was fun, rewarding and we ended up with a great product. __It is rewarding to see people be happy using Scribe__, not only do they enjoy the new UX but it has __boosted productivity__ massively and streamlined the whole authoring process within the company, improving speed and quality of content delivery. Scribe itself continues to grow and with a bit more development actually has a lot of potential as a commercial product.  
+
+Happy authoring!
+

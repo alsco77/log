@@ -1,0 +1,146 @@
+---
+title: "GP TeamNet"
+layout: post
+date: 2017-10-02 14:40
+image: /assets/images/gptn/logo.gif
+headerImage: true 
+hideTitle: true
+wide: true
+tag:
+- JQuery
+- MVC
+- NHibernate
+- SQL
+- Domain driven design
+category: project
+subCategory: web
+---
+
+<style>
+ .thumbnail{
+	 width: 30%; 
+	 display:inline-block;
+ }
+</style>
+
+
+## When
+Dec 2016 - Oct 2017
+
+## What
+[GP TeamNet](https://www.clarity.co.uk/gpteamnet/) (GPTN), a subsidiary of [Clarity](https://www.clarity.co.uk/), provide a web-based information-sharing, collaboration and compliance platform for GP practices and practice groups and are the front runner for this technology in the UK. The platform comes in the form of a large scale web app which has matured over 6 years and now contains a extensive feature list. 
+
+GPTN is very popular in England and has seen __rapid growth__ over the last 2 years, with the gross profit having doubled during my short time involved in the product. At the time of writing there are over 2700 practices using GPTN as their information sharing service platform, assisting them in day to day running of the practice! The company put a massive focus on customer satisfaction and app functionality, genuinely doing their best to accomodate issues raised by users, as is reflected in their [reviews](https://practiceindex.co.uk/gp/gpteamnet). 
+
+### Site map
+There is no getting around it - GPTN is a __large application__ and boasts an abundance of functionality. There are a lot of aspects involved in running a GP practice; managing projects, raising/handling significant events, organising/auditing staff training, accessing contacts, publishing documents - to name but a few. The system is big, with over 40 core 'areas' to account for features like the ones just listed, most of which can be accessed <a href="/assets/images/gptn/menuSnippet.png" class="html5lightbox" title="Main menu" data-description="Toolbar dropdown">via the main menu</a>. 
+
+There are over 10 main item types, e.g. library items, topics, significant events which can be accessed via the <a href="/assets/images/gptn/search.png" class="html5lightbox" title="Search" data-description="Results list">search page</a> which utilises ajax and elasticsearch calls to asynchronously populate the best search results. 
+
+## My role
+Due to the small size of the team, with 2 developers out of 7 total members, each person plays an important role and is responsible for a variety of tasks. My main tasks (in order of magnitude) were to:
+
+ - Maintain and develop the application across the __full development stack__  
+ - Organise the development plan - discussing, selecting and prioritising features  
+ - Satisfy end user requests for statistics or modify their user data/app content, as well as providing assistance to the rest of the team  
+
+## Development
+
+### Methodology
+GPTN employed an agile methodology, aiming to do 2 week SCRUMs with a points based system to assign development time to tasks. After each iteration a deploy is made and the user base is sent an email with the latest features or fixes. The 2 week iterations are somewhat relaxed, for example when a large piece of functionality or new section is added to the system, we can afford to take longer.
+
+
+### Architecture and Technology
+I will try to keep this as basic as possible disregarding most packages and plugins, so, from the top down:
+
+ - Dynamic web pages using __HTML__, __CSS__ (jQuery UI), ASP.NET __Razor__ (3.2) and __jQuery__ (3.2)
+ - ASP.NET __MVC__ (6)
+	- Automapper to help manage large domain
+ - A logic layer utilising:
+    - A carefully constructed domain with cleanly structured inheritance
+	- __NHibernate__ for ORM and queries
+    - __Elasticsearch__ for complex and fast DB queries
+    - __ServiceStack__ for Web APIs
+ - __SQL Server__
+ - Comprehensive unit testing utilising [Rhino Mocks](https://github.com/ayende/rhino-mocks)
+ - Continous deployment made possible by:
+	- 3 environment configurations
+	- 2 live __windows servers__ (2012)
+	- [TeamCity](https://www.jetbrains.com/teamcity/)
+	- Migration management to keep databases in sync
+
+
+### Vertical slice
+The best way for me to show you this architecture in action is to run through an area I added to the system - 'Reporting'. The purpose of this area was to provide users with the capability to get stats on items their practice had been viewing, the views on items created from within the practice, as well as for parent CCGs (comissioning groups) to analyse their child practices stats. These come in the form of four report pages, two of which used by GPTN staff and high level practices to get an in depth look at their childrem, and two (which we will focus on) to provide each practice with statistics. The aim being to reduce the number of manual reports needing done on our end to create a more scalable product.  
+
+<div style="text-align: justify">
+<a href="/assets/images/gptn/reportingMenu.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/reportingMenu.png" class="html5lightbox thumbnail" data-group="reportingSet" title="Report menu">
+	<img src="/assets/images/gptn/reportingMenu.png"/>
+</a>
+<a href="/assets/images/gptn/reporting.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/reporting.png" class="html5lightbox thumbnail" data-group="reportingSet" title="Report view">
+	<img src="/assets/images/gptn/reporting.png"/>
+</a>
+<a href="/assets/images/gptn/reportingSub.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/reportingSub.png" class="html5lightbox thumbnail" data-group="reportingSet" title="Sub report">
+	<img src="/assets/images/gptn/reportingSub.png"/>
+</a>
+<span style="width: 100%; display:inline-block; line-height: 0"></span>
+</div>
+
+So.. __here's the dev process__ (somewhat in order) of how the two standard reports were created (<a href="/assets/images/gptn/reportingFileHierarchy.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/reportingFileHierarchy.png" class="html5lightbox" data-group="reportingSet" title="File structure">file structure for reference</a>):   
+
+ 1. Fully spec out the details of the report ('ourViews' report requires us to view the sources of the items which the current practice has viewed - we do it first)  
+ 2. Create the new area folder, with standard views, a controller and a basic view model  
+ 3. Create a new NHibernate repository with a query to obtain the total views of our items from each source (<a href="/assets/images/gptn/ourItemsES.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/ourItemsES.png" class="html5lightbox" data-group="reportingSet" title="Views by practice query">check out the end-feature query</a>) and plug this into the view/model  
+ 4. Build up an expandable practice hierarchy and add parameters to refine search results  
+ 5. Modify the view to reload a partial with a jqGrid via ajax containing the report results when a change to the parameters is made  
+ 6. Add a sub-report to each practice to view a breakdown of the most popular items (new partial/ElasticSearch call)  
+ 7. Modularise code, adding a base controller to accomodate a second report ('ourItems' - who has been looking at our items) containing overlapping functionality which utilises different repository call  
+ 8. Create an export service and provide ability to export the data to CSV  
+ 9. Add unit tests for report creation and ensure there are no failures  
+ 10. Have the area verified by team, adding corrections before handing over to tester  
+ 11. Insert records to the 'MenuItem' table in DB with the new menu details, creating a migration and adding to next deployment  
+ 12. Deploy feature and inform users of the new reports, with a 'how-to' guide on how to utilise     
+*NB*: No new domain level objects/mapping needed here as queries are accessing information existing on the item objects
+
+
+### What I found fun
+Modularising and improving the UX across the create/edit pages for the 30+ items able to be created in the system.  
+Each item contains a variety of personalised fields, as well as many common settings i.e. item visibility, linking to other items, notifications etc. Previously all this content was given to the user on one screen, in a columned edit page, however this was a lot of info for the user. I modularised this process across the board and came up with a solution that utilised __Razor templating__ and __jq Tabs__ in order to serve the user the correct fields based on the viewmodels __inheritance hierarchy__. Not only does this __vastly improve UX__ allowing users not to get bombared with info, but it allows for much easier __scaling of the system__ with modularised code.  
+I found a great sense of satisfaction completing this task, creating a comparatively sleek UI and knowing how benificial it would be to the end user.
+
+
+<a  href="/assets/images/gptn/addlibrary.png" data-fullscreenmode="true" data-thumbnail="/assets/images/gptn/addlibrary.png" class="html5lightbox" title="Add library item">
+	<img src="/assets/images/gptn/addlibrary.png" class="centered"/>
+</a>
+
+
+### Challenges
+- __Framework upgrade__: Following the decision to remove support for IE7+, we upgraded our full stack
+	- Upgraded .NET 4 to 4.7, MVC 3 to 6, ElasticSearch 1.x to 5.6.3, jQuery 1.x to 3.2.1
+	- Handling all deprecated methods/functionality and finding/replacing all errors, as well as refactoring code to new more readable syntax required thorough work
+- Dealing with __rapid expansion__: Due to rapid growth we needed to provide a __scalable__ support system
+	- Genericised and organised frequently ran scripts in order to cut down on manual work when providing reports
+	- Provided the support team with their own reporting tools built into the system
+- Accounting for old browsers: Due to the requirements of the user base all new features (up until we deprecated support) had to be __compliant with IE7__, limiting the options availble for solution
+- Accounting for users who dont grasp things very quickly: The demographics of our user base are not known for their technological expertise - __special care and consideration__ had to be taken in order to place things in a suitable position, with sufficient instruction available
+
+
+## Personal development
+I learned alot here, namely:
+
+ - How to construct a __clean, hierarchical domain__ with correct naming and use of inheritance, as well as when and where to create new models
+ - How to prioritise tasks and __structure iterations__ whilst accounting for user requests
+ - The process and considerations of developing across the full stack
+ - The structure of the back end and how SQL, NHibernate, ElasticSearch and the Domain interact and connect to one another
+ - The importance of thorough and __well constructed unit tests__
+
+## Conclusion
+The product itself, whilst it might not have a UI up to recent modern standards, is wonderfully useful and contains a wide scope of features. The codebase is well written and structured and the team are all competent individuals. With some work, it has massive potential for use in the likes of schools and other institutions requiring information sharing and compliance.  
+I have been lucky to be exposed to such a variety of technology while at GPTN and it has given me a lot of useful experience for the future!
+
+
+
+
+
+
+
